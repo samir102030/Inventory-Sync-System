@@ -1,0 +1,299 @@
+import { useState, useRef, useEffect } from "react";
+import { useGetProducts, useGetCustomers, useCreateInvoice, getGetProductsQueryKey, getGetSummaryQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Plus, Trash2, ShoppingCart, User, CreditCard } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
+
+type CartItem = Product & { cartQuantity: number; discount: number };
+
+export default function POS() {
+  const [search, setSearch] = useState("");
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [customerId, setCustomerId] = useState<number | "">("");
+  const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>("cash");
+  const [globalDiscount, setGlobalDiscount] = useState<number>(0);
+  const [taxRate, setTaxRate] = useState<number>(0); // Should come from settings
+  
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const barcodeBuffer = useRef("");
+  const barcodeTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const { data: products } = useGetProducts({ search }, { query: { enabled: search.length > 2 } });
+  const { data: allProducts } = useGetProducts({}, { query: { enabled: true } });
+  const { data: customers } = useGetCustomers({});
+  const createInvoice = useCreateInvoice();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return; // Don't interfere with typing in inputs
+      }
+      
+      if (e.key === "Enter" && barcodeBuffer.current.length > 3) {
+        // Process barcode
+        const barcode = barcodeBuffer.current;
+        barcodeBuffer.current = "";
+        
+        const matchedProduct = allProducts?.find(p => p.barcode === barcode);
+        if (matchedProduct) {
+          addToCart(matchedProduct);
+          toast({ title: "تم إضافة المنتج", description: matchedProduct.name });
+        } else {
+          toast({ title: "منتج غير موجود", description: `الباركود: ${barcode}`, variant: "destructive" });
+        }
+      } else if (e.key.length === 1) {
+        barcodeBuffer.current += e.key;
+        if (barcodeTimeout.current) clearTimeout(barcodeTimeout.current);
+        barcodeTimeout.current = setTimeout(() => {
+          barcodeBuffer.current = "";
+        }, 100); // Reset if too slow (not a scanner)
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [allProducts, cart]);
+
+  const addToCart = (product: Product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id);
+      if (existing) {
+        return prev.map(item => item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item);
+      }
+      return [...prev, { ...product, cartQuantity: 1, discount: 0 }];
+    });
+  };
+
+  const removeFromCart = (productId: number) => {
+    setCart(prev => prev.filter(item => item.id !== productId));
+  };
+
+  const updateQuantity = (productId: number, quantity: number) => {
+    if (quantity < 1) return;
+    setCart(prev => prev.map(item => item.id === productId ? { ...item, cartQuantity: quantity } : item));
+  };
+
+  const updateDiscount = (productId: number, discount: number) => {
+    setCart(prev => prev.map(item => item.id === productId ? { ...item, discount } : item));
+  };
+
+  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.cartQuantity) - item.discount, 0);
+  const taxAmount = subtotal * (taxRate / 100);
+  const total = subtotal + taxAmount - globalDiscount;
+
+  const handleCheckout = () => {
+    if (cart.length === 0) return;
+
+    const items: InvoiceItemInput[] = cart.map(item => ({
+      productId: item.id,
+      quantity: item.cartQuantity,
+      unitPrice: item.price,
+      discount: item.discount
+    }));
+
+    createInvoice.mutate({
+      data: {
+        items,
+        customerId: customerId === "" ? undefined : customerId,
+        paymentMethod,
+        discount: globalDiscount,
+        tax: taxAmount,
+        status: "paid"
+      }
+    }, {
+      onSuccess: () => {
+        toast({ title: "تم إصدار الفاتورة بنجاح" });
+        setCart([]);
+        setCustomerId("");
+        setGlobalDiscount(0);
+        queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetSummaryQueryKey() });
+      },
+      onError: () => {
+        toast({ title: "حدث خطأ أثناء إصدار الفاتورة", variant: "destructive" });
+      }
+    });
+  };
+
+  return (
+    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-100px)]">
+      {/* Products Area */}
+      <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
+        <Card className="flex-none">
+          <CardContent className="p-4">
+            <div className="relative">
+              <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                placeholder="ابحث عن منتج (الاسم أو الباركود)..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pr-9"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex-1 overflow-auto">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {(search.length > 2 ? products : allProducts)?.slice(0, 20).map(product => (
+              <Card 
+                key={product.id} 
+                className="cursor-pointer hover:border-primary hover-elevate transition-colors"
+                onClick={() => addToCart(product)}
+              >
+                <CardContent className="p-4 flex flex-col h-full justify-between gap-2">
+                  <div>
+                    <h3 className="font-medium text-sm line-clamp-2" title={product.name}>{product.name}</h3>
+                    <p className="text-xs text-muted-foreground">{product.categoryName}</p>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="font-bold text-primary">{product.price} د.ك</span>
+                    <span className="text-xs bg-muted px-2 py-1 rounded">المخزون: {product.stock}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Cart Area */}
+      <Card className="w-full md:w-[400px] flex flex-col h-full overflow-hidden flex-none">
+        <CardHeader className="p-4 border-b">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5" />
+            سلة المشتريات
+          </CardTitle>
+        </CardHeader>
+        
+        <CardContent className="p-0 flex-1 overflow-auto">
+          {cart.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
+              <ShoppingCart className="h-12 w-12 mb-4 opacity-20" />
+              <p>السلة فارغة</p>
+              <p className="text-sm">قم بالبحث عن منتجات أو استخدم قارئ الباركود</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[180px]">المنتج</TableHead>
+                  <TableHead>الكمية</TableHead>
+                  <TableHead className="text-left">السعر</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cart.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">
+                      <div className="truncate w-[140px]" title={item.name}>{item.name}</div>
+                      <div className="text-xs text-muted-foreground">{item.price} د.ك</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Input 
+                          type="number" 
+                          min="1" 
+                          value={item.cartQuantity} 
+                          onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+                          className="w-16 h-8 text-center p-1"
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-left">
+                      {((item.price * item.cartQuantity) - item.discount).toFixed(2)}
+                    </TableCell>
+                    <TableCell className="p-2">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeFromCart(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+
+        <div className="p-4 bg-muted/30 border-t space-y-4">
+          <div className="flex items-center gap-2">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <Select value={customerId.toString()} onValueChange={(v) => setCustomerId(v === "none" ? "" : parseInt(v))}>
+              <SelectTrigger className="w-full bg-background">
+                <SelectValue placeholder="اختر العميل (اختياري)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">عميل نقدي (بدون تسجيل)</SelectItem>
+                {customers?.map(c => (
+                  <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)}>
+              <SelectTrigger className="w-full bg-background">
+                <SelectValue placeholder="طريقة الدفع" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">نقدي</SelectItem>
+                <SelectItem value="card">بطاقة بنكية / كي نت</SelectItem>
+                <SelectItem value="transfer">تحويل بنكي</SelectItem>
+                <SelectItem value="credit">آجل</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <div className="flex justify-between text-sm">
+              <span>المجموع الفرعي:</span>
+              <span>{subtotal.toFixed(2)} د.ك</span>
+            </div>
+            {taxRate > 0 && (
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>الضريبة ({taxRate}%):</span>
+                <span>{taxAmount.toFixed(2)} د.ك</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center text-sm">
+              <span>الخصم الإضافي:</span>
+              <Input 
+                type="number" 
+                min="0" 
+                step="0.1" 
+                value={globalDiscount} 
+                onChange={(e) => setGlobalDiscount(parseFloat(e.target.value) || 0)}
+                className="w-24 h-8 text-left bg-background"
+                dir="ltr"
+              />
+            </div>
+            <div className="flex justify-between font-bold text-lg pt-2 border-t">
+              <span>الإجمالي:</span>
+              <span className="text-primary">{Math.max(0, total).toFixed(2)} د.ك</span>
+            </div>
+          </div>
+
+          <Button 
+            className="w-full h-12 text-lg font-bold" 
+            onClick={handleCheckout}
+            disabled={cart.length === 0 || createInvoice.isPending}
+          >
+            {createInvoice.isPending ? "جاري الإصدار..." : "دفع وإصدار الفاتورة"}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}

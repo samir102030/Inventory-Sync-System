@@ -1,20 +1,27 @@
-# [Project name]
+# نظام إدارة المتجر — Store Management System
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+نظام متكامل لإدارة شركة تقنية وأمن — مبيعات، مخزن، فواتير، تقارير، مصروفات، تراخيص.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/store-system run dev` — run the frontend (port 24820)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` — Postgres connection string, `SESSION_SECRET` — session secret
+
+## Default Login Credentials
+
+- **Admin:** username: `admin` / password: `admin123`
+- **Cashier:** username: `cashier` / password: `cashier123`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
+- Frontend: React + Vite + TailwindCSS + Wouter + React Query
+- API: Express 5 + express-session + bcryptjs
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
@@ -22,23 +29,53 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — OpenAPI spec (source of truth for all API contracts)
+- `lib/db/src/schema/` — Drizzle DB schema (users, categories, products, customers, invoices, expenses, licenses, invoice_settings)
+- `artifacts/api-server/src/routes/` — Express route handlers
+- `artifacts/store-system/src/pages/` — React pages (login, dashboard, pos, invoices, products, customers, expenses, licenses, reports, settings)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Cookie-based session auth (express-session) — no JWT, works on LAN between 2 PCs
+- Numeric values stored as `numeric` in Postgres, converted to `Number` in API responses
+- Invoice number auto-generated from settings prefix + sequential count
+- Stock automatically decremented when invoice is created
+- Backup exports full JSON of all data for offline archival
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **Login/Auth** — role-based (admin/cashier) with cookie sessions
+- **Dashboard** — today's revenue, sales count, low-stock alerts, expiring licenses, recent invoices
+- **POS** — barcode scanner support (keyboard wedge), cart, customer selection, discount, payment method
+- **Invoices** — create, view, print-ready invoice template with company branding
+- **Products** — CRUD with barcode, category, stock tracking, low-stock warnings
+- **Customers** — CRM with purchase history total
+- **Expenses** — track operational costs by category
+- **Licenses** — software license registry with expiry alerts
+- **Reports** — daily report with revenue, expenses, net profit, payment breakdown, top products
+- **Settings** — invoice template customization (logo, colors, company info, tax)
+- **Backup** — one-click full data export as JSON
 
-## User preferences
+## Categories (pre-seeded)
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+1. كاميرات مراقبة (Security Cameras)
+2. أجهزة شبكات (Access Points & Network)
+3. أجهزة كمبيوتر (PCs & Laptops)
+4. أنظمة تحكم بالدخول (Access Control)
+5. إنذار الحريق (Fire Alarm)
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Always run `pnpm --filter @workspace/api-spec run codegen` after changing `openapi.yaml`
+- Always run `pnpm --filter @workspace/db run push` after changing schema files
+- Seed script: `node_modules/.pnpm/.../tsx artifacts/api-server/src/seed.ts`
+- The 2-PC setup: run the API server on one machine, both machines connect to the same DB
+
+## User preferences
+
+- System language: Arabic UI with LTR layout
+- No fire fighting system (only fire alarm)
+- Needs barcode scanner support
 
 ## Pointers
 
