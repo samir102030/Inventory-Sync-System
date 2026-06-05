@@ -156,7 +156,7 @@ export default function POS() {
                     <p className="text-xs text-muted-foreground">{product.categoryName}</p>
                   </div>
                   <div className="flex items-center justify-between mt-2">
-                    <span className="font-bold text-primary">{product.price} د.ك</span>
+                    <span className="font-bold text-primary">{product.price} ج.م</span>
                     <span className="text-xs bg-muted px-2 py-1 rounded">المخزون: {product.stock}</span>
                   </div>
                 </CardContent>
@@ -197,7 +197,7 @@ export default function POS() {
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">
                       <div className="truncate w-[140px]" title={item.name}>{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{item.price} د.ك</div>
+                      <div className="text-xs text-muted-foreground">{item.price} ج.م</div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -259,12 +259,12 @@ export default function POS() {
           <div className="space-y-2 pt-2">
             <div className="flex justify-between text-sm">
               <span>المجموع الفرعي:</span>
-              <span>{subtotal.toFixed(2)} د.ك</span>
+              <span>{subtotal.toFixed(2)} ج.م</span>
             </div>
             {taxRate > 0 && (
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>الضريبة ({taxRate}%):</span>
-                <span>{taxAmount.toFixed(2)} د.ك</span>
+                <span>{taxAmount.toFixed(2)} ج.م</span>
               </div>
             )}
             <div className="flex justify-between items-center text-sm">
@@ -281,7 +281,7 @@ export default function POS() {
             </div>
             <div className="flex justify-between font-bold text-lg pt-2 border-t">
               <span>الإجمالي:</span>
-              <span className="text-primary">{Math.max(0, total).toFixed(2)} د.ك</span>
+              <span className="text-primary">{Math.max(0, total).toFixed(2)} ج.م</span>
             </div>
           </div>
 

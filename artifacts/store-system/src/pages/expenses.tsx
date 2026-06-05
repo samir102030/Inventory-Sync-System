@@ -121,7 +121,7 @@ export default function Expenses() {
                        expense.category === 'salaries' ? 'رواتب' : 'أخرى'}
                     </TableCell>
                     <TableCell>{expense.description}</TableCell>
-                    <TableCell className="font-bold text-destructive">{expense.amount} د.ك</TableCell>
+                    <TableCell className="font-bold text-destructive">{expense.amount} ج.م</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(expense)}>

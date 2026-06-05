@@ -45,15 +45,15 @@ export default function Reports() {
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
                 <span className="font-medium">المبيعات</span>
-                <span className="text-lg font-bold">{report?.totalRevenue?.toFixed(2) || 0} د.ك</span>
+                <span className="text-lg font-bold">{report?.totalRevenue?.toFixed(2) || 0} ج.م</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-destructive/10 rounded-lg">
                 <span className="font-medium text-destructive">المصروفات</span>
-                <span className="text-lg font-bold text-destructive">{report?.totalExpenses?.toFixed(2) || 0} د.ك</span>
+                <span className="text-lg font-bold text-destructive">{report?.totalExpenses?.toFixed(2) || 0} ج.م</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-primary/10 rounded-lg border border-primary/20">
                 <span className="font-bold text-primary">صافي الربح</span>
-                <span className="text-xl font-bold text-primary">{report?.netProfit?.toFixed(2) || 0} د.ك</span>
+                <span className="text-xl font-bold text-primary">{report?.netProfit?.toFixed(2) || 0} ج.م</span>
               </div>
             </CardContent>
           </Card>
@@ -74,7 +74,7 @@ export default function Reports() {
                     </div>
                     <div className="text-sm">
                       <span className="text-muted-foreground ml-4">{p.quantitySold} قطعة</span>
-                      <span className="font-bold">{p.revenue.toFixed(2)} د.ك</span>
+                      <span className="font-bold">{p.revenue.toFixed(2)} ج.م</span>
                     </div>
                   </div>
                 ))}

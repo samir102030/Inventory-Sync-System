@@ -41,8 +41,8 @@ function InvoiceDetail({ id }: { id: number }) {
             <TableRow key={item.id}>
               <TableCell>{item.productName}</TableCell>
               <TableCell>{item.quantity}</TableCell>
-              <TableCell>{item.unitPrice} د.ك</TableCell>
-              <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice).toFixed(2)} د.ك</TableCell>
+              <TableCell>{item.unitPrice} ج.م</TableCell>
+              <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -53,18 +53,18 @@ function InvoiceDetail({ id }: { id: number }) {
           {invoice.discount && invoice.discount > 0 && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">الخصم:</span>
-              <span>{invoice.discount} د.ك</span>
+              <span>{invoice.discount} ج.م</span>
             </div>
           )}
           {invoice.tax && invoice.tax > 0 && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">الضريبة:</span>
-              <span>{invoice.tax} د.ك</span>
+              <span>{invoice.tax} ج.م</span>
             </div>
           )}
           <div className="flex justify-between text-lg font-bold">
             <span>الإجمالي:</span>
-            <span>{invoice.total.toFixed(2)} د.ك</span>
+            <span>{invoice.total.toFixed(2)} ج.م</span>
           </div>
         </div>
       </div>
@@ -158,7 +158,7 @@ export default function Invoices() {
                     <TableCell className="font-medium font-mono text-sm">{invoice.invoiceNumber}</TableCell>
                     <TableCell>{format(new Date(invoice.createdAt), 'yyyy/MM/dd HH:mm')}</TableCell>
                     <TableCell>{invoice.customerName || 'عميل نقدي'}</TableCell>
-                    <TableCell className="font-bold">{invoice.total.toFixed(2)} د.ك</TableCell>
+                    <TableCell className="font-bold">{invoice.total.toFixed(2)} ج.م</TableCell>
                     <TableCell>{getPaymentMethod(invoice.paymentMethod || '')}</TableCell>
                     <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                     <TableCell>
