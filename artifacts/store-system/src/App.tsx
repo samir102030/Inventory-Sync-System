@@ -21,6 +21,7 @@ import Suppliers from "@/pages/suppliers";
 import Purchases from "@/pages/purchases";
 import ReceiptVouchers from "@/pages/receipt-vouchers";
 import PaymentVouchers from "@/pages/payment-vouchers";
+import Accounts from "@/pages/accounts";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ function Router() {
       <Route path="/licenses"><ProtectedRoute component={Licenses} /></Route>
       <Route path="/reports"><ProtectedRoute component={Reports} /></Route>
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
+      <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

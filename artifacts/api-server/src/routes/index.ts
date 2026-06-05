@@ -14,6 +14,7 @@ import settingsRouter from "./settings";
 import suppliersRouter from "./suppliers";
 import purchasesRouter from "./purchases";
 import vouchersRouter from "./vouchers";
+import accountsRouter from "./accounts";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(settingsRouter);
 router.use(suppliersRouter);
 router.use(purchasesRouter);
 router.use(vouchersRouter);
+router.use(accountsRouter);
 
 export default router;
