@@ -6,7 +6,6 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Layout } from "@/components/layout";
 
-// Pages
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import POS from "@/pages/pos";
@@ -18,41 +17,36 @@ import Expenses from "@/pages/expenses";
 import Licenses from "@/pages/licenses";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
+import Suppliers from "@/pages/suppliers";
+import Purchases from "@/pages/purchases";
+import ReceiptVouchers from "@/pages/receipt-vouchers";
+import PaymentVouchers from "@/pages/payment-vouchers";
 
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <div className="flex h-screen w-full items-center justify-center">جاري التحميل...</div>;
-  }
-
-  if (!user) {
-    return <Redirect to="/login" />;
-  }
-
-  return (
-    <Layout>
-      <Component />
-    </Layout>
-  );
+  if (isLoading) return <div className="flex h-screen w-full items-center justify-center">جاري التحميل...</div>;
+  if (!user) return <Redirect to="/login" />;
+  return <Layout><Component /></Layout>;
 }
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/">
-        <Redirect to="/dashboard" />
-      </Route>
+      <Route path="/"><Redirect to="/dashboard" /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/pos"><ProtectedRoute component={POS} /></Route>
       <Route path="/invoices"><ProtectedRoute component={Invoices} /></Route>
       <Route path="/products"><ProtectedRoute component={Products} /></Route>
       <Route path="/categories"><ProtectedRoute component={Categories} /></Route>
       <Route path="/customers"><ProtectedRoute component={Customers} /></Route>
+      <Route path="/suppliers"><ProtectedRoute component={Suppliers} /></Route>
+      <Route path="/purchases"><ProtectedRoute component={Purchases} /></Route>
       <Route path="/expenses"><ProtectedRoute component={Expenses} /></Route>
+      <Route path="/receipt-vouchers"><ProtectedRoute component={ReceiptVouchers} /></Route>
+      <Route path="/payment-vouchers"><ProtectedRoute component={PaymentVouchers} /></Route>
       <Route path="/licenses"><ProtectedRoute component={Licenses} /></Route>
       <Route path="/reports"><ProtectedRoute component={Reports} /></Route>
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>

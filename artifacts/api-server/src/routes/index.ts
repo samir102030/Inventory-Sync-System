@@ -11,6 +11,9 @@ import licensesRouter from "./licenses";
 import reportsRouter from "./reports";
 import backupRouter from "./backup";
 import settingsRouter from "./settings";
+import suppliersRouter from "./suppliers";
+import purchasesRouter from "./purchases";
+import vouchersRouter from "./vouchers";
 
 const router: IRouter = Router();
 
@@ -26,5 +29,8 @@ router.use(licensesRouter);
 router.use(reportsRouter);
 router.use(backupRouter);
 router.use(settingsRouter);
+router.use(suppliersRouter);
+router.use(purchasesRouter);
+router.use(vouchersRouter);
 
 export default router;

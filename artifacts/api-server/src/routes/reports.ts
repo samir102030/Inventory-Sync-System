@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, invoicesTable, invoiceItemsTable, expensesTable, productsTable, categoriesTable, customersTable, licensesTable } from "@workspace/db";
+import { db, invoicesTable, invoiceItemsTable, expensesTable, productsTable, categoriesTable, customersTable, licensesTable, purchasesTable } from "@workspace/db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 const router = Router();
@@ -29,6 +29,12 @@ router.get("/reports/daily", async (req, res) => {
     .where(eq(expensesTable.date, dateStr));
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0);
 
+  const purchasesRows = await db
+    .select({ total: purchasesTable.total })
+    .from(purchasesTable)
+    .where(eq(purchasesTable.date, dateStr));
+  const totalPurchases = purchasesRows.reduce((s, p) => s + Number(p.total), 0);
+
   const topProductsRaw = await db
     .select({
       productId: invoiceItemsTable.productId,
@@ -51,7 +57,8 @@ router.get("/reports/daily", async (req, res) => {
     totalSales: totalRevenue,
     totalRevenue,
     totalExpenses,
-    netProfit: totalRevenue - totalExpenses,
+    totalPurchases,
+    netProfit: totalRevenue - totalExpenses - totalPurchases,
     invoiceCount,
     paymentBreakdown,
     topProducts: topProductsRaw.map(p => ({
@@ -80,6 +87,12 @@ router.get("/reports/summary", async (_req, res) => {
     .from(invoicesTable)
     .where(and(gte(sql`${invoicesTable.createdAt}::date`, sql`${monthStart}::date`), eq(invoicesTable.status, "paid")));
   const monthRevenue = monthInvoices.reduce((s, i) => s + Number(i.total), 0);
+
+  const monthPurchasesRows = await db
+    .select({ total: purchasesTable.total })
+    .from(purchasesTable)
+    .where(and(gte(purchasesTable.date, monthStart), lte(purchasesTable.date, today)));
+  const monthPurchases = monthPurchasesRows.reduce((s, p) => s + Number(p.total), 0);
 
   const [{ cnt: totalProducts }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(productsTable);
   const [{ cnt: totalCustomers }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(customersTable);
@@ -123,6 +136,7 @@ router.get("/reports/summary", async (_req, res) => {
     totalCustomers: Number(totalCustomers),
     lowStockCount,
     monthRevenue,
+    monthPurchases,
     expiringLicenses,
     recentInvoices: recentInvoices.map(inv => ({
       id: inv.id,

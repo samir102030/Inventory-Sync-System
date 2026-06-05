@@ -6,8 +6,10 @@ export const customersTable = pgTable("customers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   phone: text("phone"),
+  whatsapp: text("whatsapp"),
   email: text("email"),
   address: text("address"),
+  taxNumber: text("tax_number"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
