@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, invoiceSettingsTable } from "@workspace/db";
+import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, invoiceSettingsTable, invoiceReturnsTable, invoiceReturnItemsTable } from "@workspace/db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 const router = Router();
@@ -28,6 +28,12 @@ async function generateInvoiceNumber() {
   const count = await db.select({ cnt: sql<number>`COUNT(*)` }).from(invoicesTable);
   const num = (Number(count[0]?.cnt ?? 0) + 1).toString().padStart(5, "0");
   return `${prefix}-${num}`;
+}
+
+async function generateReturnNumber(invoiceNumber: string) {
+  const count = await db.select({ cnt: sql<number>`COUNT(*)` }).from(invoiceReturnsTable);
+  const num = (Number(count[0]?.cnt ?? 0) + 1).toString().padStart(5, "0");
+  return `RET-${num}`;
 }
 
 router.get("/invoices", async (req, res) => {
@@ -169,14 +175,134 @@ router.get("/invoices/:id", async (req, res) => {
 });
 
 router.patch("/invoices/:id", async (req, res) => {
-  const { status, notes, discount } = req.body;
+  const { status, notes, discount, tax, paymentMethod, customerId } = req.body;
+
+  const invRows = await db.select().from(invoicesTable).where(eq(invoicesTable.id, Number(req.params.id))).limit(1);
+  if (!invRows[0]) return res.status(404).json({ error: "Not found" });
+  const inv = invRows[0];
+
   const updates: Record<string, any> = {};
-  if (status !== undefined) updates.status = status;
   if (notes !== undefined) updates.notes = notes;
-  if (discount !== undefined) updates.discount = String(discount);
-  const [inv] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, Number(req.params.id))).returning();
-  if (!inv) return res.status(404).json({ error: "Not found" });
-  return res.json(formatInvoice(inv));
+  if (paymentMethod !== undefined) updates.paymentMethod = paymentMethod;
+  if (customerId !== undefined) updates.customerId = customerId ? Number(customerId) : null;
+
+  const newDiscount = discount !== undefined ? Number(discount) : Number(inv.discount);
+  const newTax = tax !== undefined ? Number(tax) : Number(inv.tax);
+  if (discount !== undefined) updates.discount = String(newDiscount);
+  if (tax !== undefined) updates.tax = String(newTax);
+
+  if (discount !== undefined || tax !== undefined) {
+    const newTotal = Number(inv.subtotal) - newDiscount + newTax;
+    updates.total = String(newTotal);
+  }
+
+  if (status !== undefined && status !== inv.status) {
+    updates.status = status;
+    if (status === "cancelled" && inv.status !== "cancelled") {
+      const items = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
+      for (const item of items) {
+        await db.update(productsTable).set({ stock: sql`${productsTable.stock} + ${item.quantity}` }).where(eq(productsTable.id, item.productId));
+      }
+    }
+  }
+
+  const [updated] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, Number(req.params.id))).returning();
+  let customerName = null;
+  if (updated.customerId) {
+    const custs = await db.select().from(customersTable).where(eq(customersTable.id, updated.customerId)).limit(1);
+    customerName = custs[0]?.name ?? null;
+  }
+  return res.json(formatInvoice(updated, customerName));
+});
+
+router.get("/invoices/:id/returns", async (req, res) => {
+  const returns = await db
+    .select()
+    .from(invoiceReturnsTable)
+    .where(eq(invoiceReturnsTable.invoiceId, Number(req.params.id)))
+    .orderBy(sql`${invoiceReturnsTable.createdAt} DESC`);
+
+  const result = [];
+  for (const ret of returns) {
+    const items = await db.select().from(invoiceReturnItemsTable).where(eq(invoiceReturnItemsTable.returnId, ret.id));
+    result.push({
+      ...ret,
+      total: Number(ret.total),
+      createdAt: ret.createdAt.toISOString(),
+      items: items.map(i => ({ ...i, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice), total: Number(i.total) })),
+    });
+  }
+  return res.json(result);
+});
+
+router.post("/invoices/:id/return", async (req, res) => {
+  const { reason, items } = req.body;
+  if (!items?.length) return res.status(400).json({ error: "items required" });
+
+  const invRows = await db.select().from(invoicesTable).where(eq(invoicesTable.id, Number(req.params.id))).limit(1);
+  if (!invRows[0]) return res.status(404).json({ error: "Invoice not found" });
+  const inv = invRows[0];
+
+  const originalItems = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
+
+  let returnTotal = 0;
+  const returnItems: Array<{ productId: number; productName: string; quantity: number; unitPrice: number; total: number }> = [];
+
+  for (const retItem of items) {
+    const original = originalItems.find(o => o.productId === Number(retItem.productId));
+    if (!original) return res.status(400).json({ error: `Item not found in invoice` });
+    const qty = Number(retItem.quantity);
+    if (qty <= 0) continue;
+    if (qty > Number(original.quantity)) return res.status(400).json({ error: `Cannot return more than original quantity for ${original.productName}` });
+    const price = Number(original.unitPrice);
+    const itemTotal = qty * price;
+    returnTotal += itemTotal;
+    returnItems.push({ productId: original.productId, productName: original.productName, quantity: qty, unitPrice: price, total: itemTotal });
+  }
+
+  if (returnItems.length === 0) return res.status(400).json({ error: "No valid items to return" });
+
+  const returnNumber = await generateReturnNumber(inv.invoiceNumber);
+
+  const [ret] = await db.insert(invoiceReturnsTable).values({
+    returnNumber,
+    invoiceId: inv.id,
+    reason: reason ?? null,
+    total: String(returnTotal),
+  }).returning();
+
+  for (const item of returnItems) {
+    await db.insert(invoiceReturnItemsTable).values({
+      returnId: ret.id,
+      productId: item.productId,
+      productName: item.productName,
+      quantity: String(item.quantity),
+      unitPrice: String(item.unitPrice),
+      total: String(item.total),
+    });
+    await db.update(productsTable).set({ stock: sql`${productsTable.stock} + ${item.quantity}` }).where(eq(productsTable.id, item.productId));
+  }
+
+  const allOriginalQty = originalItems.reduce((s, i) => s + Number(i.quantity), 0);
+  const allReturnedQty = returnItems.reduce((s, i) => s + i.quantity, 0);
+  const totalReturnedRows = await db.select({ cnt: sql<number>`COUNT(*)` }).from(invoiceReturnItemsTable)
+    .innerJoin(invoiceReturnsTable, eq(invoiceReturnsTable.id, invoiceReturnItemsTable.returnId))
+    .where(eq(invoiceReturnsTable.invoiceId, inv.id));
+  const totalReturnedQtyRows = await db.select({ total: sql<number>`SUM(${invoiceReturnItemsTable.quantity}::numeric)` })
+    .from(invoiceReturnItemsTable)
+    .innerJoin(invoiceReturnsTable, eq(invoiceReturnsTable.id, invoiceReturnItemsTable.returnId))
+    .where(eq(invoiceReturnsTable.invoiceId, inv.id));
+  const totalReturnedQty = Number(totalReturnedQtyRows[0]?.total ?? 0);
+
+  const newStatus = totalReturnedQty >= allOriginalQty ? "returned" : "partial_return";
+  await db.update(invoicesTable).set({ status: newStatus }).where(eq(invoicesTable.id, inv.id));
+
+  return res.status(201).json({
+    ...ret,
+    total: Number(ret.total),
+    createdAt: ret.createdAt.toISOString(),
+    items: returnItems,
+  });
 });
 
 router.delete("/invoices/:id", async (req, res) => {

@@ -30,6 +30,25 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   total: numeric("total", { precision: 12, scale: 2 }).notNull(),
 });
 
+export const invoiceReturnsTable = pgTable("invoice_returns", {
+  id: serial("id").primaryKey(),
+  returnNumber: text("return_number").notNull().unique(),
+  invoiceId: integer("invoice_id").notNull().references(() => invoicesTable.id),
+  reason: text("reason"),
+  total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const invoiceReturnItemsTable = pgTable("invoice_return_items", {
+  id: serial("id").primaryKey(),
+  returnId: integer("return_id").notNull().references(() => invoiceReturnsTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => productsTable.id),
+  productName: text("product_name").notNull(),
+  quantity: numeric("quantity", { precision: 10, scale: 3 }).notNull(),
+  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+  total: numeric("total", { precision: 12, scale: 2 }).notNull(),
+});
+
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true });
 export const insertInvoiceItemSchema = createInsertSchema(invoiceItemsTable).omit({ id: true });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
