@@ -134,6 +134,7 @@ export default function POS() {
   };
 
   return (
+    <>
     <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-100px)]">
       {/* Products Area */}
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
@@ -356,5 +357,6 @@ export default function POS() {
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
