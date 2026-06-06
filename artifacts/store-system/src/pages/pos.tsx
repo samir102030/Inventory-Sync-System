@@ -1,16 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { useGetProducts, useGetCustomers, useCreateInvoice, getGetProductsQueryKey, getGetSummaryQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Trash2, ShoppingCart, User, CreditCard } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
+import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
 
 type CartItem = Product & { cartQuantity: number; discount: number };
+type CreatedInvoice = { invoiceNumber: string; total: number; subtotal: number; discount: number; tax: number; paymentMethod: string; customerName?: string | null; customerWhatsapp?: string | null; items?: Array<{ productName: string; quantity: number; unitPrice: number }> };
 
 export default function POS() {
   const [search, setSearch] = useState("");
@@ -18,7 +21,8 @@ export default function POS() {
   const [customerId, setCustomerId] = useState<number | "">("");
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>("cash");
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
-  const [taxRate, setTaxRate] = useState<number>(0); // Should come from settings
+  const [taxRate, setTaxRate] = useState<number>(0);
+  const [successInvoice, setSuccessInvoice] = useState<CreatedInvoice | null>(null);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const barcodeBuffer = useRef("");
@@ -99,6 +103,7 @@ export default function POS() {
       discount: item.discount
     }));
 
+    const cartSnapshot = [...cart];
     createInvoice.mutate({
       data: {
         items,
@@ -109,8 +114,13 @@ export default function POS() {
         status: "paid"
       }
     }, {
-      onSuccess: () => {
-        toast({ title: "تم إصدار الفاتورة بنجاح" });
+      onSuccess: (inv: any) => {
+        const customer = customers?.find(c => c.id === customerId);
+        setSuccessInvoice({
+          ...inv,
+          customerWhatsapp: inv.customerWhatsapp ?? (customer as any)?.whatsapp ?? null,
+          items: cartSnapshot.map(i => ({ productName: i.name, quantity: i.cartQuantity, unitPrice: i.price })),
+        });
         setCart([]);
         setCustomerId("");
         setGlobalDiscount(0);
@@ -295,5 +305,56 @@ export default function POS() {
         </div>
       </Card>
     </div>
+
+    {/* Success + WhatsApp Dialog */}
+    <Dialog open={!!successInvoice} onOpenChange={open => !open && setSuccessInvoice(null)}>
+      <DialogContent dir="rtl" className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-green-600">
+            <CheckCircle className="h-5 w-5" />
+            تم إصدار الفاتورة
+          </DialogTitle>
+          <DialogDescription>الفاتورة جاهزة — يمكنك إرسالها على واتساب مباشرة</DialogDescription>
+        </DialogHeader>
+        {successInvoice && (
+          <div className="space-y-4">
+            <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+              <div className="flex justify-between font-bold text-base">
+                <span>رقم الفاتورة:</span>
+                <span className="font-mono">{successInvoice.invoiceNumber}</span>
+              </div>
+              {successInvoice.customerName && (
+                <div className="flex justify-between"><span className="text-muted-foreground">العميل:</span><span>{successInvoice.customerName}</span></div>
+              )}
+              <div className="flex justify-between font-bold text-green-700 text-base border-t pt-2">
+                <span>الإجمالي:</span>
+                <span>{Number(successInvoice.total).toFixed(2)} ج.م</span>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              {successInvoice.customerWhatsapp ? (
+                <Button
+                  className="w-full bg-green-600 hover:bg-green-700 gap-2"
+                  onClick={() => {
+                    openWhatsApp(successInvoice.customerWhatsapp!, buildInvoiceMessage(successInvoice));
+                  }}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  إرسال الفاتورة على واتساب
+                </Button>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center bg-muted/50 rounded p-2">
+                  لا يوجد رقم واتساب للعميل
+                </div>
+              )}
+              <Button variant="outline" className="w-full" onClick={() => setSuccessInvoice(null)}>
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

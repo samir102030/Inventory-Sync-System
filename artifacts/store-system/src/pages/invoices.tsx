@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Printer, Eye, Edit, RotateCcw, XCircle, CheckCircle } from "lucide-react";
+import { Search, Printer, Eye, Edit, RotateCcw, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
 
 const BASE = "/api";
 const fetchJSON = (url: string, opts?: RequestInit) =>
@@ -320,7 +321,7 @@ function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => voi
 
       {/* Actions */}
       <div className="flex justify-between items-center pt-3 border-t no-print">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {!isCancelled && (
             <Button variant="outline" onClick={onEdit} size="sm">
               <Edit className="h-4 w-4 ml-1" />
@@ -331,6 +332,20 @@ function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => voi
             <Button variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={onReturn} size="sm">
               <RotateCcw className="h-4 w-4 ml-1" />
               مرتجع
+            </Button>
+          )}
+          {(invoice as any).customerWhatsapp && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-green-600 border-green-500 hover:bg-green-50 gap-1"
+              onClick={() => openWhatsApp(
+                (invoice as any).customerWhatsapp,
+                buildInvoiceMessage({ ...invoice, items: invoice.items })
+              )}
+            >
+              <MessageCircle className="h-4 w-4" />
+              إرسال واتساب
             </Button>
           )}
         </div>

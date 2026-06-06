@@ -4,12 +4,13 @@ import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 const router = Router();
 
-function formatInvoice(inv: any, customerName?: string | null) {
+function formatInvoice(inv: any, customerName?: string | null, customerWhatsapp?: string | null) {
   return {
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
     customerId: inv.customerId ?? null,
     customerName: customerName ?? null,
+    customerWhatsapp: customerWhatsapp ?? null,
     subtotal: Number(inv.subtotal),
     discount: Number(inv.discount),
     tax: Number(inv.tax),
@@ -50,6 +51,7 @@ router.get("/invoices", async (req, res) => {
       invoiceNumber: invoicesTable.invoiceNumber,
       customerId: invoicesTable.customerId,
       customerName: customersTable.name,
+      customerWhatsapp: customersTable.whatsapp,
       subtotal: invoicesTable.subtotal,
       discount: invoicesTable.discount,
       tax: invoicesTable.tax,
@@ -65,7 +67,7 @@ router.get("/invoices", async (req, res) => {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(sql`${invoicesTable.createdAt} DESC`);
 
-  return res.json(rows.map(r => formatInvoice(r, r.customerName)));
+  return res.json(rows.map(r => formatInvoice(r, r.customerName, r.customerWhatsapp)));
 });
 
 router.post("/invoices", async (req, res) => {
@@ -125,12 +127,14 @@ router.post("/invoices", async (req, res) => {
   }
 
   let customerName = null;
+  let customerWhatsapp = null;
   if (customerId) {
     const custs = await db.select().from(customersTable).where(eq(customersTable.id, Number(customerId))).limit(1);
     customerName = custs[0]?.name ?? null;
+    customerWhatsapp = custs[0]?.whatsapp ?? null;
   }
 
-  return res.status(201).json(formatInvoice(inv, customerName));
+  return res.status(201).json(formatInvoice(inv, customerName, customerWhatsapp));
 });
 
 router.get("/invoices/:id", async (req, res) => {
@@ -140,6 +144,7 @@ router.get("/invoices/:id", async (req, res) => {
       invoiceNumber: invoicesTable.invoiceNumber,
       customerId: invoicesTable.customerId,
       customerName: customersTable.name,
+      customerWhatsapp: customersTable.whatsapp,
       subtotal: invoicesTable.subtotal,
       discount: invoicesTable.discount,
       tax: invoicesTable.tax,
@@ -171,7 +176,7 @@ router.get("/invoices/:id", async (req, res) => {
     total: Number(i.total),
   }));
 
-  return res.json({ ...formatInvoice(rows[0], rows[0].customerName), items });
+  return res.json({ ...formatInvoice(rows[0], rows[0].customerName, rows[0].customerWhatsapp), items });
 });
 
 router.patch("/invoices/:id", async (req, res) => {
