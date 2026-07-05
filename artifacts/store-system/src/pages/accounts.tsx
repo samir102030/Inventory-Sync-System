@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet } from "lucide-react";
+import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet, ArrowLeftRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -44,9 +44,11 @@ export default function Accounts() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [isTxnDialog, setIsTxnDialog] = useState(false);
   const [txnDirection, setTxnDirection] = useState<"in" | "out">("in");
+  const [isTransferDialog, setIsTransferDialog] = useState(false);
 
   const [accountForm, setAccountForm] = useState({ name: "", type: "cash", color: "#3b82f6", initialBalance: "", notes: "" });
   const [txnForm, setTxnForm] = useState({ amount: "", description: "", category: "", date: format(new Date(), "yyyy-MM-dd"), reference: "" });
+  const [transferForm, setTransferForm] = useState({ fromAccountId: "", toAccountId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), notes: "" });
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -92,6 +94,23 @@ export default function Accounts() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["account-txns", selectedAccountId] }); },
   });
 
+  const transferFunds = useMutation({
+    mutationFn: async (data: { fromAccountId: number; toAccountId: number; amount: number; date: string; notes?: string }) => {
+      const res = await fetch(`${BASE}/accounts/transfer`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "حدث خطأ");
+      return json;
+    },
+    onSuccess: () => {
+      toast({ title: "تم الترحيل بين الحسابات بنجاح" });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["account-txns"] });
+      setIsTransferDialog(false);
+      setTransferForm({ fromAccountId: "", toAccountId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), notes: "" });
+    },
+    onError: (err: Error) => toast({ title: err.message || "حدث خطأ", variant: "destructive" }),
+  });
+
   const resetAccountForm = () => { setAccountForm({ name: "", type: "cash", color: "#3b82f6", initialBalance: "", notes: "" }); setEditingAccount(null); };
 
   const openEditAccount = (a: Account) => {
@@ -114,6 +133,41 @@ export default function Accounts() {
     createTxn.mutate({ accountId: selectedAccountId, direction: txnDirection, amount: parseFloat(txnForm.amount), description: txnForm.description, category: txnForm.category || undefined, date: txnForm.date, reference: txnForm.reference || undefined });
   };
 
+  const openTransferDialog = () => {
+    setTransferForm({
+      fromAccountId: selectedAccountId ? String(selectedAccountId) : (accounts[0] ? String(accounts[0].id) : ""),
+      toAccountId: "",
+      amount: "",
+      date: format(new Date(), "yyyy-MM-dd"),
+      notes: "",
+    });
+    setIsTransferDialog(true);
+  };
+
+  const handleTransferSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferForm.fromAccountId || !transferForm.toAccountId) {
+      toast({ title: "الرجاء اختيار الحساب المحوَّل منه والمحوَّل إليه", variant: "destructive" });
+      return;
+    }
+    if (transferForm.fromAccountId === transferForm.toAccountId) {
+      toast({ title: "لا يمكن التحويل لنفس الحساب", variant: "destructive" });
+      return;
+    }
+    const amt = parseFloat(transferForm.amount);
+    if (!amt || amt <= 0) {
+      toast({ title: "الرجاء إدخال مبلغ صحيح", variant: "destructive" });
+      return;
+    }
+    transferFunds.mutate({
+      fromAccountId: Number(transferForm.fromAccountId),
+      toAccountId: Number(transferForm.toAccountId),
+      amount: amt,
+      date: transferForm.date,
+      notes: transferForm.notes || undefined,
+    });
+  };
+
   const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
 
   return (
@@ -126,10 +180,16 @@ export default function Accounts() {
             إجمالي الأرصدة: <span className="font-bold text-green-600 text-base">{totalBalance.toFixed(2)} ج.م</span>
           </p>
         </div>
-        <Button onClick={() => { resetAccountForm(); setIsAccountDialog(true); }}>
-          <Plus className="h-4 w-4 ml-2" />
-          إضافة حساب
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={openTransferDialog} disabled={accounts.length < 2}>
+            <ArrowLeftRight className="h-4 w-4 ml-2" />
+            ترحيل بين الخزائن
+          </Button>
+          <Button onClick={() => { resetAccountForm(); setIsAccountDialog(true); }}>
+            <Plus className="h-4 w-4 ml-2" />
+            إضافة حساب
+          </Button>
+        </div>
       </div>
 
       {/* Accounts Grid */}
@@ -199,6 +259,10 @@ export default function Accounts() {
                 <Button size="sm" variant="outline" className="text-destructive border-destructive hover:bg-red-50" onClick={() => openTxnDialog("out")}>
                   <ArrowUpCircle className="h-4 w-4 ml-1" />
                   صادر
+                </Button>
+                <Button size="sm" variant="outline" onClick={openTransferDialog} disabled={accounts.length < 2}>
+                  <ArrowLeftRight className="h-4 w-4 ml-1" />
+                  ترحيل
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedAccountId(null)}><X className="h-4 w-4" /></Button>
               </div>
@@ -333,6 +397,72 @@ export default function Accounts() {
               <Button type="submit" disabled={createTxn.isPending}
                 className={txnDirection === "in" ? "bg-green-600 hover:bg-green-700" : "bg-destructive hover:bg-destructive/90"}>
                 {createTxn.isPending ? "جاري الحفظ..." : txnDirection === "in" ? "تسجيل الوارد" : "تسجيل الصادر"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Between Accounts Dialog */}
+      <Dialog open={isTransferDialog} onOpenChange={open => { if (!open) setIsTransferDialog(false); }}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight className="h-5 w-5" />
+              ترحيل بين الخزائن
+            </DialogTitle>
+            <DialogDescription>تحويل مبلغ من حساب إلى آخر مباشرة</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleTransferSubmit} className="space-y-4">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+              <div className="space-y-2">
+                <Label>من حساب *</Label>
+                <Select value={transferForm.fromAccountId} onValueChange={v => setTransferForm({ ...transferForm, fromAccountId: v })}>
+                  <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
+                  <SelectContent>
+                    {accounts.map(a => (
+                      <SelectItem key={a.id} value={String(a.id)} disabled={String(a.id) === transferForm.toAccountId}>
+                        {a.name} ({a.balance.toFixed(2)} ج.م)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="pb-2 text-muted-foreground">
+                <ArrowLeftRight className="h-5 w-5" />
+              </div>
+              <div className="space-y-2">
+                <Label>إلى حساب *</Label>
+                <Select value={transferForm.toAccountId} onValueChange={v => setTransferForm({ ...transferForm, toAccountId: v })}>
+                  <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
+                  <SelectContent>
+                    {accounts.map(a => (
+                      <SelectItem key={a.id} value={String(a.id)} disabled={String(a.id) === transferForm.fromAccountId}>
+                        {a.name} ({a.balance.toFixed(2)} ج.م)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>المبلغ (ج.م) *</Label>
+                <Input type="number" min="0.01" step="0.01" value={transferForm.amount} onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })} required autoFocus />
+              </div>
+              <div className="space-y-2">
+                <Label>التاريخ *</Label>
+                <Input type="date" value={transferForm.date} onChange={e => setTransferForm({ ...transferForm, date: e.target.value })} required />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>ملاحظات</Label>
+              <Input value={transferForm.notes} onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })} placeholder="سبب التحويل (اختياري)" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsTransferDialog(false)}>إلغاء</Button>
+              <Button type="submit" disabled={transferFunds.isPending}>
+                {transferFunds.isPending ? "جاري الترحيل..." : "ترحيل"}
               </Button>
             </div>
           </form>

@@ -92,4 +92,45 @@ router.delete("/accounts/transactions/:id", async (req, res) => {
   return res.json({ ok: true });
 });
 
+router.post("/accounts/transfer", async (req, res) => {
+  const { fromAccountId, toAccountId, amount, date, notes } = req.body;
+  if (!fromAccountId || !toAccountId || amount == null || !date)
+    return res.status(400).json({ error: "fromAccountId, toAccountId, amount, date required" });
+  if (Number(fromAccountId) === Number(toAccountId))
+    return res.status(400).json({ error: "لا يمكن التحويل لنفس الحساب" });
+  if (Number(amount) <= 0)
+    return res.status(400).json({ error: "المبلغ يجب أن يكون أكبر من صفر" });
+
+  const [fromAccount] = await db.select().from(accountsTable).where(eq(accountsTable.id, Number(fromAccountId))).limit(1);
+  const [toAccount] = await db.select().from(accountsTable).where(eq(accountsTable.id, Number(toAccountId))).limit(1);
+  if (!fromAccount || !toAccount) return res.status(404).json({ error: "الحساب غير موجود" });
+
+  const transferRef = `transfer:${fromAccountId}-${toAccountId}-${Date.now()}`;
+
+  const [outTxn] = await db.insert(accountTransactionsTable).values({
+    accountId: Number(fromAccountId),
+    direction: "out",
+    amount: String(amount),
+    description: `تحويل إلى ${toAccount.name}${notes ? ` — ${notes}` : ""}`,
+    category: "تحويل بين حسابات",
+    date,
+    reference: transferRef,
+  }).returning();
+
+  const [inTxn] = await db.insert(accountTransactionsTable).values({
+    accountId: Number(toAccountId),
+    direction: "in",
+    amount: String(amount),
+    description: `تحويل من ${fromAccount.name}${notes ? ` — ${notes}` : ""}`,
+    category: "تحويل بين حسابات",
+    date,
+    reference: transferRef,
+  }).returning();
+
+  return res.status(201).json({
+    outTxn: { ...outTxn, amount: Number(outTxn.amount), createdAt: outTxn.createdAt.toISOString() },
+    inTxn: { ...inTxn, amount: Number(inTxn.amount), createdAt: inTxn.createdAt.toISOString() },
+  });
+});
+
 export default router;
