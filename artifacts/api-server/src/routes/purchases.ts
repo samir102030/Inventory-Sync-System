@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, purchasesTable, purchaseItemsTable, productsTable, suppliersTable } from "@workspace/db";
+import { db, purchasesTable, purchaseItemsTable, productsTable, suppliersTable, accountTransactionsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 
 const router = Router();
@@ -13,6 +13,8 @@ router.get("/purchases", async (_req, res) => {
       supplierName: purchasesTable.supplierName,
       total: purchasesTable.total,
       date: purchasesTable.date,
+      paymentMethod: purchasesTable.paymentMethod,
+      accountId: purchasesTable.accountId,
       notes: purchasesTable.notes,
       createdAt: purchasesTable.createdAt,
     })
@@ -39,8 +41,9 @@ router.get("/purchases/:id", async (req, res) => {
 });
 
 router.post("/purchases", async (req, res) => {
-  const { supplierId, supplierName, date, notes, items } = req.body;
+  const { supplierId, supplierName, date, notes, items, paymentMethod, accountId } = req.body;
   if (!date || !items?.length) return res.status(400).json({ error: "date and items required" });
+  if (paymentMethod === "credit" && !supplierId) return res.status(400).json({ error: "supplierId is required for credit purchases" });
 
   const total = (items as Array<{ quantity: number; unitCost: number }>)
     .reduce((s, i) => s + i.quantity * i.unitCost, 0);
@@ -52,12 +55,16 @@ router.post("/purchases", async (req, res) => {
     ? (await db.select({ name: suppliersTable.name }).from(suppliersTable).where(eq(suppliersTable.id, supplierId)).limit(1))[0]?.name ?? supplierName ?? null
     : (supplierName ?? null);
 
+  const method = paymentMethod === "credit" ? "credit" : "cash";
+
   const [purchase] = await db.insert(purchasesTable).values({
     purchaseNumber,
     supplierId: supplierId ?? null,
     supplierName: supplierLabel,
     total: String(total),
     date,
+    paymentMethod: method,
+    accountId: accountId ? Number(accountId) : null,
     notes: notes ?? null,
   }).returning();
 
@@ -77,10 +84,23 @@ router.post("/purchases", async (req, res) => {
       .where(eq(productsTable.id, item.productId));
   }
 
+  if (method === "cash" && purchase.accountId && total > 0) {
+    await db.insert(accountTransactionsTable).values({
+      accountId: purchase.accountId,
+      direction: "out",
+      amount: String(total),
+      description: `فاتورة مشتريات رقم ${purchaseNumber}${supplierLabel ? ` — ${supplierLabel}` : ""}`,
+      category: "مشتريات",
+      date,
+      reference: `purchase:${purchase.id}`,
+    });
+  }
+
   return res.status(201).json({ ...purchase, total: Number(purchase.total), createdAt: purchase.createdAt.toISOString() });
 });
 
 router.delete("/purchases/:id", async (req, res) => {
+  await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `purchase:${req.params.id}`));
   await db.delete(purchasesTable).where(eq(purchasesTable.id, Number(req.params.id)));
   return res.json({ ok: true });
 });

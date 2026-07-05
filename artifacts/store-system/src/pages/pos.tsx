@@ -115,8 +115,12 @@ export default function POS() {
       discount: item.discount
     }));
 
-    if (accountId === "") {
+    if (paymentMethod !== "credit" && accountId === "") {
       toast({ title: "الرجاء اختيار الحساب / الخزينة التي سيتم استلام المبلغ فيها", variant: "destructive" });
+      return;
+    }
+    if (paymentMethod === "credit" && customerId === "") {
+      toast({ title: "الرجاء اختيار عميل مسجل للبيع الآجل", variant: "destructive" });
       return;
     }
 
@@ -125,7 +129,7 @@ export default function POS() {
       data: {
         items,
         customerId: customerId === "" ? undefined : customerId,
-        accountId,
+        accountId: paymentMethod === "credit" ? undefined : (accountId === "" ? undefined : accountId),
         paymentMethod,
         discount: globalDiscount,
         tax: taxAmount,

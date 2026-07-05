@@ -1,6 +1,7 @@
 import { pgTable, text, serial, timestamp, integer, numeric, date } from "drizzle-orm/pg-core";
 import { suppliersTable } from "./suppliers";
 import { productsTable } from "./products";
+import { accountsTable } from "./accounts";
 
 export const purchasesTable = pgTable("purchases", {
   id: serial("id").primaryKey(),
@@ -9,6 +10,8 @@ export const purchasesTable = pgTable("purchases", {
   supplierName: text("supplier_name"),
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   date: date("date", { mode: "string" }).notNull(),
+  paymentMethod: text("payment_method").notNull().default("cash"),
+  accountId: integer("account_id").references(() => accountsTable.id),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

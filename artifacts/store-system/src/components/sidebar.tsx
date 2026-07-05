@@ -15,6 +15,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Landmark,
+  HandCoins,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -52,6 +53,7 @@ const purchaseItems = [
 
 const financeItems = [
   { title: "الخزينة والحسابات", url: "/accounts", icon: Landmark },
+  { title: "حسابات الآجل", url: "/credit-accounts", icon: HandCoins },
   { title: "سندات القبض", url: "/receipt-vouchers", icon: ArrowDownCircle },
   { title: "سندات الصرف", url: "/payment-vouchers", icon: ArrowUpCircle },
   { title: "المصروفات", url: "/expenses", icon: CreditCard },

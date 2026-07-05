@@ -1,0 +1,92 @@
+import { Router } from "express";
+import { db, invoicesTable, customersTable, receiptVouchersTable, purchasesTable, suppliersTable, paymentVouchersTable } from "@workspace/db";
+import { eq, sql, and } from "drizzle-orm";
+
+const router = Router();
+
+router.get("/credit-accounts/customers", async (_req, res) => {
+  const creditTotals = await db
+    .select({
+      customerId: invoicesTable.customerId,
+      customerName: customersTable.name,
+      totalCredit: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)`,
+    })
+    .from(invoicesTable)
+    .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+    .where(and(eq(invoicesTable.paymentMethod, "credit"), sql`${invoicesTable.status} != 'cancelled'`))
+    .groupBy(invoicesTable.customerId, customersTable.name);
+
+  const paidTotals = await db
+    .select({
+      customerId: receiptVouchersTable.customerId,
+      totalPaid: sql<string>`COALESCE(SUM(${receiptVouchersTable.amount}), 0)`,
+    })
+    .from(receiptVouchersTable)
+    .where(sql`${receiptVouchersTable.customerId} IS NOT NULL`)
+    .groupBy(receiptVouchersTable.customerId);
+
+  const paidMap = new Map(paidTotals.map(p => [p.customerId, Number(p.totalPaid)]));
+
+  const rows = creditTotals
+    .filter(c => c.customerId !== null)
+    .map(c => {
+      const totalCredit = Number(c.totalCredit);
+      const totalPaid = paidMap.get(c.customerId) ?? 0;
+      return {
+        customerId: c.customerId,
+        customerName: c.customerName ?? "بدون اسم",
+        totalCredit,
+        totalPaid,
+        balance: totalCredit - totalPaid,
+      };
+    })
+    .filter(r => r.balance > 0.001)
+    .sort((a, b) => b.balance - a.balance);
+
+  return res.json(rows);
+});
+
+router.get("/credit-accounts/suppliers", async (_req, res) => {
+  const creditTotals = await db
+    .select({
+      supplierId: purchasesTable.supplierId,
+      supplierName: suppliersTable.name,
+      supplierLabel: purchasesTable.supplierName,
+      totalCredit: sql<string>`COALESCE(SUM(${purchasesTable.total}), 0)`,
+    })
+    .from(purchasesTable)
+    .leftJoin(suppliersTable, eq(purchasesTable.supplierId, suppliersTable.id))
+    .where(eq(purchasesTable.paymentMethod, "credit"))
+    .groupBy(purchasesTable.supplierId, suppliersTable.name, purchasesTable.supplierName);
+
+  const paidTotals = await db
+    .select({
+      supplierId: paymentVouchersTable.supplierId,
+      totalPaid: sql<string>`COALESCE(SUM(${paymentVouchersTable.amount}), 0)`,
+    })
+    .from(paymentVouchersTable)
+    .where(sql`${paymentVouchersTable.supplierId} IS NOT NULL`)
+    .groupBy(paymentVouchersTable.supplierId);
+
+  const paidMap = new Map(paidTotals.map(p => [p.supplierId, Number(p.totalPaid)]));
+
+  const rows = creditTotals
+    .filter(c => c.supplierId !== null)
+    .map(c => {
+      const totalCredit = Number(c.totalCredit);
+      const totalPaid = paidMap.get(c.supplierId) ?? 0;
+      return {
+        supplierId: c.supplierId,
+        supplierName: c.supplierName ?? c.supplierLabel ?? "بدون اسم",
+        totalCredit,
+        totalPaid,
+        balance: totalCredit - totalPaid,
+      };
+    })
+    .filter(r => r.balance > 0.001)
+    .sort((a, b) => b.balance - a.balance);
+
+  return res.json(rows);
+});
+
+export default router;

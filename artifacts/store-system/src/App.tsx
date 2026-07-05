@@ -22,6 +22,7 @@ import Purchases from "@/pages/purchases";
 import ReceiptVouchers from "@/pages/receipt-vouchers";
 import PaymentVouchers from "@/pages/payment-vouchers";
 import Accounts from "@/pages/accounts";
+import CreditAccounts from "@/pages/credit-accounts";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,7 @@ function Router() {
       <Route path="/reports"><ProtectedRoute component={Reports} /></Route>
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
       <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
+      <Route path="/credit-accounts"><ProtectedRoute component={CreditAccounts} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

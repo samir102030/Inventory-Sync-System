@@ -13,8 +13,9 @@ import { format } from "date-fns";
 
 type Supplier = { id: number; name: string };
 type Product = { id: number; name: string; costPrice?: number };
+type Account = { id: number; name: string };
 type PurchaseItem = { productId: number; productName: string; quantity: number; unitCost: number; total: number };
-type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; date: string; notes?: string | null; createdAt: string };
+type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; date: string; paymentMethod?: string; accountId?: number | null; notes?: string | null; createdAt: string };
 
 const BASE = "/api";
 const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
@@ -30,6 +31,8 @@ export default function Purchases() {
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [itemQty, setItemQty] = useState("1");
   const [itemCost, setItemCost] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "credit">("cash");
+  const [accountId, setAccountId] = useState<string>("");
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -37,19 +40,20 @@ export default function Purchases() {
   const { data: purchases, isLoading } = useQuery<Purchase[]>({ queryKey: ["purchases"], queryFn: () => fetchJSON(`${BASE}/purchases`) });
   const { data: suppliers } = useQuery<Supplier[]>({ queryKey: ["suppliers"], queryFn: () => fetchJSON(`${BASE}/suppliers`) });
   const { data: products } = useQuery<Product[]>({ queryKey: ["products"], queryFn: () => fetchJSON(`${BASE}/products`) });
+  const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ["accounts"], queryFn: () => fetchJSON(`${BASE}/accounts`) });
 
   const createMutation = useMutation({
     mutationFn: (data: object) => fetch(`${BASE}/purchases`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: () => { toast({ title: "تم تسجيل المشتريات" }); qc.invalidateQueries({ queryKey: ["purchases"] }); qc.invalidateQueries({ queryKey: ["products"] }); resetForm(); setIsDialogOpen(false); },
+    onSuccess: () => { toast({ title: "تم تسجيل المشتريات" }); qc.invalidateQueries({ queryKey: ["purchases"] }); qc.invalidateQueries({ queryKey: ["products"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["credit-accounts-suppliers"] }); resetForm(); setIsDialogOpen(false); },
     onError: () => toast({ title: "حدث خطأ", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => fetch(`${BASE}/purchases/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
-    onSuccess: () => { toast({ title: "تم حذف الطلب" }); qc.invalidateQueries({ queryKey: ["purchases"] }); },
+    onSuccess: () => { toast({ title: "تم حذف الطلب" }); qc.invalidateQueries({ queryKey: ["purchases"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); },
   });
 
-  const resetForm = () => { setSupplierId(""); setSupplierName(""); setDate(format(new Date(), "yyyy-MM-dd")); setNotes(""); setItems([]); setSelectedProductId(""); setItemQty("1"); setItemCost(""); };
+  const resetForm = () => { setSupplierId(""); setSupplierName(""); setDate(format(new Date(), "yyyy-MM-dd")); setNotes(""); setItems([]); setSelectedProductId(""); setItemQty("1"); setItemCost(""); setPaymentMethod("cash"); setAccountId(accounts[0] ? String(accounts[0].id) : ""); };
 
   const addItem = () => {
     if (!selectedProductId || !itemQty || !itemCost) return;
@@ -66,7 +70,23 @@ export default function Purchases() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!items.length) { toast({ title: "أضف منتجاً على الأقل", variant: "destructive" }); return; }
-    createMutation.mutate({ supplierId: supplierId ? Number(supplierId) : undefined, supplierName: supplierName || undefined, date, notes: notes || undefined, items });
+    if (paymentMethod === "cash" && !accountId) {
+      toast({ title: "الرجاء اختيار الحساب / الخزينة التي سيُصرف منها المبلغ", variant: "destructive" });
+      return;
+    }
+    if (paymentMethod === "credit" && !supplierId) {
+      toast({ title: "الرجاء اختيار المورد المسجل للمشتريات الآجلة", variant: "destructive" });
+      return;
+    }
+    createMutation.mutate({
+      supplierId: supplierId ? Number(supplierId) : undefined,
+      supplierName: supplierName || undefined,
+      date,
+      notes: notes || undefined,
+      items,
+      paymentMethod,
+      accountId: paymentMethod === "cash" ? Number(accountId) : undefined,
+    });
   };
 
   const handleView = async (id: number) => {
@@ -94,20 +114,28 @@ export default function Purchases() {
                 <TableHead>رقم الطلب</TableHead>
                 <TableHead>المورد</TableHead>
                 <TableHead>التاريخ</TableHead>
+                <TableHead>طريقة الدفع</TableHead>
                 <TableHead>الإجمالي (ج.م)</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
               ) : purchases?.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">لا توجد مشتريات</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">لا توجد مشتريات</TableCell></TableRow>
               ) : purchases?.map(p => (
                 <TableRow key={p.id}>
                   <TableCell className="font-mono font-bold">{p.purchaseNumber}</TableCell>
                   <TableCell>{p.supplierName || "-"}</TableCell>
                   <TableCell>{format(new Date(p.date), "yyyy/MM/dd")}</TableCell>
+                  <TableCell>
+                    {p.paymentMethod === "credit" ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">آجل</span>
+                    ) : (
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">نقدي</span>
+                    )}
+                  </TableCell>
                   <TableCell className="font-bold text-blue-600">{p.total.toFixed(2)} ج.م</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
@@ -146,6 +174,25 @@ export default function Purchases() {
                 <Label>ملاحظات</Label>
                 <Input value={notes} onChange={e => setNotes(e.target.value)} />
               </div>
+              <div className="space-y-2">
+                <Label>طريقة الدفع *</Label>
+                <Select value={paymentMethod} onValueChange={v => setPaymentMethod(v as "cash" | "credit")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">نقدي (فوري)</SelectItem>
+                    <SelectItem value="credit">آجل</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {paymentMethod === "cash" && (
+                <div className="space-y-2">
+                  <Label>الحساب / الخزينة *</Label>
+                  <Select value={accountId} onValueChange={setAccountId}>
+                    <SelectTrigger><SelectValue placeholder="اختر الحساب..." /></SelectTrigger>
+                    <SelectContent>{accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <Card>

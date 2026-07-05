@@ -74,6 +74,7 @@ router.get("/invoices", async (req, res) => {
 router.post("/invoices", async (req, res) => {
   const { customerId, accountId, items, discount, tax, paymentMethod, status, notes } = req.body;
   if (!items?.length || !paymentMethod) return res.status(400).json({ error: "items and paymentMethod required" });
+  if (paymentMethod === "credit" && !customerId) return res.status(400).json({ error: "customerId is required for credit sales" });
 
   const invoiceNumber = await generateInvoiceNumber();
   const userId = (req.session as any)?.userId;
@@ -128,7 +129,7 @@ router.post("/invoices", async (req, res) => {
     await db.update(productsTable).set({ stock: sql`${productsTable.stock} - ${item.quantity}` }).where(eq(productsTable.id, item.productId));
   }
 
-  if (accountId && (inv.status === "paid" || !status) && total > 0) {
+  if (accountId && paymentMethod !== "credit" && (inv.status === "paid" || !status) && total > 0) {
     await db.insert(accountTransactionsTable).values({
       accountId: Number(accountId),
       direction: "in",
@@ -232,7 +233,7 @@ router.patch("/invoices/:id", async (req, res) => {
 
   if (updated.status === "paid" || updated.status === "partial_return") {
     const finalAccountId = updated.accountId;
-    if (finalAccountId) {
+    if (finalAccountId && updated.paymentMethod !== "credit") {
       const existingTxn = await db.select().from(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`)).limit(1);
       if (existingTxn[0]) {
         await db.update(accountTransactionsTable).set({ accountId: finalAccountId, amount: String(newTotal) }).where(eq(accountTransactionsTable.id, existingTxn[0].id));
@@ -247,6 +248,8 @@ router.patch("/invoices/:id", async (req, res) => {
           reference: `invoice:${inv.id}`,
         });
       }
+    } else if (updated.paymentMethod === "credit") {
+      await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`));
     }
   }
 

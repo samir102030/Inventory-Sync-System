@@ -15,6 +15,7 @@ import suppliersRouter from "./suppliers";
 import purchasesRouter from "./purchases";
 import vouchersRouter from "./vouchers";
 import accountsRouter from "./accounts";
+import creditAccountsRouter from "./credit-accounts";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(suppliersRouter);
 router.use(purchasesRouter);
 router.use(vouchersRouter);
 router.use(accountsRouter);
+router.use(creditAccountsRouter);
 
 export default router;
