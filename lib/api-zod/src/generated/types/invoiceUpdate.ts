@@ -11,4 +11,5 @@ export interface InvoiceUpdate {
   status?: InvoiceUpdateStatus;
   notes?: string;
   discount?: number;
+  accountId?: number;
 }

@@ -11,6 +11,7 @@ import type { InvoiceItemInput } from './invoiceItemInput';
 
 export interface InvoiceInput {
   customerId?: number;
+  accountId?: number;
   items: InvoiceItemInput[];
   discount?: number;
   tax?: number;

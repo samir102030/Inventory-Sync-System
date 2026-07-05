@@ -204,6 +204,8 @@ export interface Invoice {
   customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
+  /** @nullable */
+  accountId?: number | null;
   subtotal?: number;
   discount?: number;
   tax?: number;
@@ -243,6 +245,8 @@ export interface InvoiceDetail {
   customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
+  /** @nullable */
+  accountId?: number | null;
   subtotal?: number;
   discount?: number;
   tax?: number;
@@ -278,6 +282,7 @@ export const InvoiceInputStatus = {
 
 export interface InvoiceInput {
   customerId?: number;
+  accountId?: number;
   items: InvoiceItemInput[];
   discount?: number;
   tax?: number;
@@ -299,6 +304,7 @@ export interface InvoiceUpdate {
   status?: InvoiceUpdateStatus;
   notes?: string;
   discount?: number;
+  accountId?: number;
 }
 
 export interface Expense {
@@ -307,6 +313,8 @@ export interface Expense {
   amount: number;
   category: string;
   date: string;
+  /** @nullable */
+  accountId?: number | null;
   /** @nullable */
   notes?: string | null;
   createdAt: string;
@@ -317,6 +325,7 @@ export interface ExpenseInput {
   amount: number;
   category: string;
   date: string;
+  accountId?: number;
   notes?: string;
 }
 
@@ -325,6 +334,7 @@ export interface ExpenseUpdate {
   amount?: number;
   category?: string;
   date?: string;
+  accountId?: number;
   notes?: string;
 }
 

@@ -13,6 +13,8 @@ export interface Expense {
   category: string;
   date: string;
   /** @nullable */
+  accountId?: number | null;
+  /** @nullable */
   notes?: string | null;
   createdAt: string;
 }

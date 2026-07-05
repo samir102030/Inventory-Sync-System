@@ -1084,6 +1084,8 @@ components:
           type: ["integer", "null"]
         customerName:
           type: ["string", "null"]
+        accountId:
+          type: ["integer", "null"]
         subtotal:
           type: number
         discount:
@@ -1117,6 +1119,8 @@ components:
           type: ["integer", "null"]
         customerName:
           type: ["string", "null"]
+        accountId:
+          type: ["integer", "null"]
         subtotal:
           type: number
         discount:
@@ -1148,6 +1152,8 @@ components:
       properties:
         customerId:
           type: integer
+        accountId:
+          type: integer
         items:
           type: array
           items:
@@ -1175,6 +1181,8 @@ components:
           type: string
         discount:
           type: number
+        accountId:
+          type: integer
 
     Expense:
       type: object
@@ -1190,6 +1198,8 @@ components:
           type: string
         date:
           type: string
+        accountId:
+          type: ["integer", "null"]
         notes:
           type: ["string", "null"]
         createdAt:
@@ -1207,6 +1217,8 @@ components:
           type: string
         date:
           type: string
+        accountId:
+          type: integer
         notes:
           type: string
 
@@ -1221,6 +1233,8 @@ components:
           type: string
         date:
           type: string
+        accountId:
+          type: integer
         notes:
           type: string
 

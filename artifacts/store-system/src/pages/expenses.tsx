@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useGetExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense, getGetExpensesQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,12 +13,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import type { Expense } from "@workspace/api-client-react/src/generated/api.schemas";
 
+type Account = { id: number; name: string };
+const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
+
 export default function Expenses() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [formData, setFormData] = useState({ description: "", amount: "", category: "other", date: format(new Date(), 'yyyy-MM-dd') });
+  const [formData, setFormData] = useState({ description: "", amount: "", category: "other", date: format(new Date(), 'yyyy-MM-dd'), accountId: "" });
 
   const { data: expenses, isLoading } = useGetExpenses({});
+  const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
   const deleteExpense = useDeleteExpense();
@@ -33,21 +37,27 @@ export default function Expenses() {
         amount: expense.amount.toString(),
         category: expense.category,
         date: expense.date,
+        accountId: (expense as any).accountId ? String((expense as any).accountId) : "",
       });
     } else {
       setEditingExpense(null);
-      setFormData({ description: "", amount: "", category: "other", date: format(new Date(), 'yyyy-MM-dd') });
+      setFormData({ description: "", amount: "", category: "other", date: format(new Date(), 'yyyy-MM-dd'), accountId: accounts[0] ? String(accounts[0].id) : "" });
     }
     setIsDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.accountId) {
+      toast({ title: "الرجاء اختيار الحساب / الخزينة التي سيُخصم منها المصروف", variant: "destructive" });
+      return;
+    }
     const data = {
       description: formData.description,
       amount: parseFloat(formData.amount),
       category: formData.category,
       date: formData.date,
+      accountId: Number(formData.accountId),
     };
 
     if (editingExpense) {
@@ -55,6 +65,7 @@ export default function Expenses() {
         onSuccess: () => {
           toast({ title: "تم تحديث المصروف" });
           queryClient.invalidateQueries({ queryKey: getGetExpensesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: ["accounts"] });
           setIsDialogOpen(false);
         }
       });
@@ -63,6 +74,7 @@ export default function Expenses() {
         onSuccess: () => {
           toast({ title: "تم تسجيل المصروف" });
           queryClient.invalidateQueries({ queryKey: getGetExpensesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: ["accounts"] });
           setIsDialogOpen(false);
         }
       });
@@ -169,6 +181,15 @@ export default function Expenses() {
             <div className="space-y-2">
               <Label>التاريخ</Label>
               <Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
+            </div>
+            <div className="space-y-2">
+              <Label>الحساب / الخزينة *</Label>
+              <Select value={formData.accountId} onValueChange={v => setFormData({...formData, accountId: v})}>
+                <SelectTrigger><SelectValue placeholder="اختر الحساب..." /></SelectTrigger>
+                <SelectContent>
+                  {accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>إلغاء</Button>

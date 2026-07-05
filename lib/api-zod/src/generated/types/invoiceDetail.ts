@@ -16,6 +16,8 @@ export interface InvoiceDetail {
   customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
+  /** @nullable */
+  accountId?: number | null;
   subtotal?: number;
   discount?: number;
   tax?: number;

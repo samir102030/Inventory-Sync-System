@@ -11,5 +11,6 @@ export interface ExpenseInput {
   amount: number;
   category: string;
   date: string;
+  accountId?: number;
   notes?: string;
 }

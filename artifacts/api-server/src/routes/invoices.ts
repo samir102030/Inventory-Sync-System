@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, invoiceSettingsTable, invoiceReturnsTable, invoiceReturnItemsTable } from "@workspace/db";
+import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, invoiceSettingsTable, invoiceReturnsTable, invoiceReturnItemsTable, accountTransactionsTable } from "@workspace/db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 const router = Router();
@@ -11,6 +11,7 @@ function formatInvoice(inv: any, customerName?: string | null, customerWhatsapp?
     customerId: inv.customerId ?? null,
     customerName: customerName ?? null,
     customerWhatsapp: customerWhatsapp ?? null,
+    accountId: inv.accountId ?? null,
     subtotal: Number(inv.subtotal),
     discount: Number(inv.discount),
     tax: Number(inv.tax),
@@ -71,7 +72,7 @@ router.get("/invoices", async (req, res) => {
 });
 
 router.post("/invoices", async (req, res) => {
-  const { customerId, items, discount, tax, paymentMethod, status, notes } = req.body;
+  const { customerId, accountId, items, discount, tax, paymentMethod, status, notes } = req.body;
   if (!items?.length || !paymentMethod) return res.status(400).json({ error: "items and paymentMethod required" });
 
   const invoiceNumber = await generateInvoiceNumber();
@@ -103,6 +104,7 @@ router.post("/invoices", async (req, res) => {
   const [inv] = await db.insert(invoicesTable).values({
     invoiceNumber,
     customerId: customerId ? Number(customerId) : null,
+    accountId: accountId ? Number(accountId) : null,
     subtotal: String(subtotal),
     discount: String(discountAmt),
     tax: String(taxAmt),
@@ -124,6 +126,18 @@ router.post("/invoices", async (req, res) => {
       total: String(item.total),
     });
     await db.update(productsTable).set({ stock: sql`${productsTable.stock} - ${item.quantity}` }).where(eq(productsTable.id, item.productId));
+  }
+
+  if (accountId && (inv.status === "paid" || !status) && total > 0) {
+    await db.insert(accountTransactionsTable).values({
+      accountId: Number(accountId),
+      direction: "in",
+      amount: String(total),
+      description: `فاتورة مبيعات رقم ${invoiceNumber}`,
+      category: "مبيعات",
+      date: new Date().toISOString().slice(0, 10),
+      reference: `invoice:${inv.id}`,
+    });
   }
 
   let customerName = null;
@@ -180,7 +194,7 @@ router.get("/invoices/:id", async (req, res) => {
 });
 
 router.patch("/invoices/:id", async (req, res) => {
-  const { status, notes, discount, tax, paymentMethod, customerId } = req.body;
+  const { status, notes, discount, tax, paymentMethod, customerId, accountId } = req.body;
 
   const invRows = await db.select().from(invoicesTable).where(eq(invoicesTable.id, Number(req.params.id))).limit(1);
   if (!invRows[0]) return res.status(404).json({ error: "Not found" });
@@ -190,14 +204,16 @@ router.patch("/invoices/:id", async (req, res) => {
   if (notes !== undefined) updates.notes = notes;
   if (paymentMethod !== undefined) updates.paymentMethod = paymentMethod;
   if (customerId !== undefined) updates.customerId = customerId ? Number(customerId) : null;
+  if (accountId !== undefined) updates.accountId = accountId ? Number(accountId) : null;
 
   const newDiscount = discount !== undefined ? Number(discount) : Number(inv.discount);
   const newTax = tax !== undefined ? Number(tax) : Number(inv.tax);
   if (discount !== undefined) updates.discount = String(newDiscount);
   if (tax !== undefined) updates.tax = String(newTax);
 
+  let newTotal = Number(inv.total);
   if (discount !== undefined || tax !== undefined) {
-    const newTotal = Number(inv.subtotal) - newDiscount + newTax;
+    newTotal = Number(inv.subtotal) - newDiscount + newTax;
     updates.total = String(newTotal);
   }
 
@@ -208,10 +224,32 @@ router.patch("/invoices/:id", async (req, res) => {
       for (const item of items) {
         await db.update(productsTable).set({ stock: sql`${productsTable.stock} + ${item.quantity}` }).where(eq(productsTable.id, item.productId));
       }
+      await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`));
     }
   }
 
   const [updated] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, Number(req.params.id))).returning();
+
+  if (updated.status === "paid" || updated.status === "partial_return") {
+    const finalAccountId = updated.accountId;
+    if (finalAccountId) {
+      const existingTxn = await db.select().from(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`)).limit(1);
+      if (existingTxn[0]) {
+        await db.update(accountTransactionsTable).set({ accountId: finalAccountId, amount: String(newTotal) }).where(eq(accountTransactionsTable.id, existingTxn[0].id));
+      } else {
+        await db.insert(accountTransactionsTable).values({
+          accountId: finalAccountId,
+          direction: "in",
+          amount: String(newTotal),
+          description: `فاتورة مبيعات رقم ${updated.invoiceNumber}`,
+          category: "مبيعات",
+          date: new Date().toISOString().slice(0, 10),
+          reference: `invoice:${inv.id}`,
+        });
+      }
+    }
+  }
+
   let customerName = null;
   if (updated.customerId) {
     const custs = await db.select().from(customersTable).where(eq(customersTable.id, updated.customerId)).limit(1);
@@ -302,6 +340,18 @@ router.post("/invoices/:id/return", async (req, res) => {
   const newStatus = totalReturnedQty >= allOriginalQty ? "returned" : "partial_return";
   await db.update(invoicesTable).set({ status: newStatus }).where(eq(invoicesTable.id, inv.id));
 
+  if (inv.accountId) {
+    await db.insert(accountTransactionsTable).values({
+      accountId: inv.accountId,
+      direction: "out",
+      amount: String(returnTotal),
+      description: `مرتجع فاتورة رقم ${inv.invoiceNumber} (${returnNumber})`,
+      category: "مرتجعات",
+      date: new Date().toISOString().slice(0, 10),
+      reference: `invoice-return:${ret.id}`,
+    });
+  }
+
   return res.status(201).json({
     ...ret,
     total: Number(ret.total),
@@ -311,6 +361,11 @@ router.post("/invoices/:id/return", async (req, res) => {
 });
 
 router.delete("/invoices/:id", async (req, res) => {
+  const returns = await db.select().from(invoiceReturnsTable).where(eq(invoiceReturnsTable.invoiceId, Number(req.params.id)));
+  for (const ret of returns) {
+    await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice-return:${ret.id}`));
+  }
+  await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${req.params.id}`));
   await db.delete(invoicesTable).where(eq(invoicesTable.id, Number(req.params.id)));
   return res.json({ ok: true });
 });

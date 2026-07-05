@@ -381,6 +381,7 @@ export const GetInvoicesResponseItem = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "accountId": zod.number().nullish(),
   "subtotal": zod.number().optional(),
   "discount": zod.number().optional(),
   "tax": zod.number().optional(),
@@ -399,6 +400,7 @@ export const GetInvoicesResponse = zod.array(GetInvoicesResponseItem)
  */
 export const CreateInvoiceBody = zod.object({
   "customerId": zod.number().optional(),
+  "accountId": zod.number().optional(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "quantity": zod.number(),
@@ -425,6 +427,7 @@ export const GetInvoiceResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "accountId": zod.number().nullish(),
   "subtotal": zod.number().optional(),
   "discount": zod.number().optional(),
   "tax": zod.number().optional(),
@@ -456,7 +459,8 @@ export const UpdateInvoiceParams = zod.object({
 export const UpdateInvoiceBody = zod.object({
   "status": zod.enum(['draft', 'paid', 'cancelled']).optional(),
   "notes": zod.string().optional(),
-  "discount": zod.number().optional()
+  "discount": zod.number().optional(),
+  "accountId": zod.number().optional()
 })
 
 export const UpdateInvoiceResponse = zod.object({
@@ -464,6 +468,7 @@ export const UpdateInvoiceResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "accountId": zod.number().nullish(),
   "subtotal": zod.number().optional(),
   "discount": zod.number().optional(),
   "tax": zod.number().optional(),
@@ -499,6 +504,7 @@ export const GetExpensesResponseItem = zod.object({
   "amount": zod.number(),
   "category": zod.string(),
   "date": zod.string(),
+  "accountId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
 })
@@ -513,6 +519,7 @@ export const CreateExpenseBody = zod.object({
   "amount": zod.number(),
   "category": zod.string(),
   "date": zod.string(),
+  "accountId": zod.number().optional(),
   "notes": zod.string().optional()
 })
 
@@ -529,6 +536,7 @@ export const UpdateExpenseBody = zod.object({
   "amount": zod.number().optional(),
   "category": zod.string().optional(),
   "date": zod.string().optional(),
+  "accountId": zod.number().optional(),
   "notes": zod.string().optional()
 })
 
@@ -538,6 +546,7 @@ export const UpdateExpenseResponse = zod.object({
   "amount": zod.number(),
   "category": zod.string(),
   "date": zod.string(),
+  "accountId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
 })
@@ -665,6 +674,7 @@ export const GetSummaryResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "accountId": zod.number().nullish(),
   "subtotal": zod.number().optional(),
   "discount": zod.number().optional(),
   "tax": zod.number().optional(),
@@ -729,6 +739,7 @@ export const ExportBackupResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "accountId": zod.number().nullish(),
   "subtotal": zod.number().optional(),
   "discount": zod.number().optional(),
   "tax": zod.number().optional(),
@@ -754,6 +765,7 @@ export const ExportBackupResponse = zod.object({
   "amount": zod.number(),
   "category": zod.string(),
   "date": zod.string(),
+  "accountId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string()
 })),

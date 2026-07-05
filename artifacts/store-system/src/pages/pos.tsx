@@ -7,19 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle } from "lucide-react";
+import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
 import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
 
 type CartItem = Product & { cartQuantity: number; discount: number };
 type CreatedInvoice = { invoiceNumber: string; total: number; subtotal: number; discount: number; tax: number; paymentMethod: string; customerName?: string | null; customerWhatsapp?: string | null; items?: Array<{ productName: string; quantity: number; unitPrice: number }> };
+type Account = { id: number; name: string; type: string };
+
+const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
 
 export default function POS() {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>("cash");
+  const [accountId, setAccountId] = useState<number | "">("");
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(0);
   const [successInvoice, setSuccessInvoice] = useState<CreatedInvoice | null>(null);
@@ -31,9 +36,16 @@ export default function POS() {
   const { data: products } = useGetProducts({ search }, { query: { enabled: search.length > 2 } });
   const { data: allProducts } = useGetProducts({}, { query: { enabled: true } });
   const { data: customers } = useGetCustomers({});
+  const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const createInvoice = useCreateInvoice();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (accountId === "" && accounts.length > 0) {
+      setAccountId(accounts[0].id);
+    }
+  }, [accounts]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -103,11 +115,17 @@ export default function POS() {
       discount: item.discount
     }));
 
+    if (accountId === "") {
+      toast({ title: "الرجاء اختيار الحساب / الخزينة التي سيتم استلام المبلغ فيها", variant: "destructive" });
+      return;
+    }
+
     const cartSnapshot = [...cart];
     createInvoice.mutate({
       data: {
         items,
         customerId: customerId === "" ? undefined : customerId,
+        accountId,
         paymentMethod,
         discount: globalDiscount,
         tax: taxAmount,
@@ -126,6 +144,7 @@ export default function POS() {
         setGlobalDiscount(0);
         queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetSummaryQueryKey() });
+        queryClient.invalidateQueries({ queryKey: ["accounts"] });
       },
       onError: () => {
         toast({ title: "حدث خطأ أثناء إصدار الفاتورة", variant: "destructive" });
@@ -263,6 +282,20 @@ export default function POS() {
                 <SelectItem value="card">بطاقة بنكية / كي نت</SelectItem>
                 <SelectItem value="transfer">تحويل بنكي</SelectItem>
                 <SelectItem value="credit">آجل</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-muted-foreground" />
+            <Select value={accountId.toString()} onValueChange={(v) => setAccountId(v === "" ? "" : parseInt(v))}>
+              <SelectTrigger className="w-full bg-background">
+                <SelectValue placeholder="الحساب / الخزينة المستلمة" />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map(a => (
+                  <SelectItem key={a.id} value={a.id.toString()}>{a.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
