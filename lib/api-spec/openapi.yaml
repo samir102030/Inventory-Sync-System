@@ -89,6 +89,21 @@ paths:
         "401":
           description: Unauthorized
 
+  /auth/google-sync:
+    post:
+      operationId: googleSync
+      tags: [auth]
+      summary: Sync Clerk Google sign-in with local user account
+      responses:
+        "200":
+          description: Signed in or pending approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleSyncResult"
+        "401":
+          description: Unauthorized
+
   /users:
     get:
       operationId: getUsers
@@ -839,7 +854,7 @@ components:
 
     User:
       type: object
-      required: [id, username, role, name, createdAt]
+      required: [id, username, role, name, status, createdAt]
       properties:
         id:
           type: integer
@@ -850,6 +865,18 @@ components:
         role:
           type: string
           enum: [admin, cashier]
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, pending]
+        loginMethod:
+          type: string
+          enum: [password, google]
         createdAt:
           type: string
 
@@ -866,6 +893,8 @@ components:
         role:
           type: string
           enum: [admin, cashier]
+        phone:
+          type: string
 
     UserUpdate:
       type: object
@@ -879,6 +908,21 @@ components:
         role:
           type: string
           enum: [admin, cashier]
+        phone:
+          type: string
+        status:
+          type: string
+          enum: [active, pending]
+
+    GoogleSyncResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approved, pending]
+        user:
+          $ref: "#/components/schemas/User"
 
     Category:
       type: object

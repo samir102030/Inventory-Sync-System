@@ -5,12 +5,18 @@
  * Store Management System API
  * OpenAPI spec version: 0.1.0
  */
+import type { UserLoginMethod } from './userLoginMethod';
 import type { UserRole } from './userRole';
+import type { UserStatus } from './userStatus';
 
 export interface User {
   id: number;
   username: string;
   name: string;
   role: UserRole;
+  email?: string | null;
+  phone?: string | null;
+  status: UserStatus;
+  loginMethod?: UserLoginMethod;
   createdAt: string;
 }

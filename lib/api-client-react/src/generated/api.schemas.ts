@@ -22,11 +22,31 @@ export const UserRole = {
   cashier: 'cashier',
 } as const;
 
+export type UserStatus = typeof UserStatus[keyof typeof UserStatus];
+
+
+export const UserStatus = {
+  active: 'active',
+  pending: 'pending',
+} as const;
+
+export type UserLoginMethod = typeof UserLoginMethod[keyof typeof UserLoginMethod];
+
+
+export const UserLoginMethod = {
+  password: 'password',
+  google: 'google',
+} as const;
+
 export interface User {
   id: number;
   username: string;
   name: string;
   role: UserRole;
+  email?: string | null;
+  phone?: string | null;
+  status: UserStatus;
+  loginMethod?: UserLoginMethod;
   createdAt: string;
 }
 
@@ -47,6 +67,7 @@ export interface UserInput {
   password: string;
   name: string;
   role: UserInputRole;
+  phone?: string;
 }
 
 export type UserUpdateRole = typeof UserUpdateRole[keyof typeof UserUpdateRole];
@@ -57,11 +78,34 @@ export const UserUpdateRole = {
   cashier: 'cashier',
 } as const;
 
+export type UserUpdateStatus = typeof UserUpdateStatus[keyof typeof UserUpdateStatus];
+
+
+export const UserUpdateStatus = {
+  active: 'active',
+  pending: 'pending',
+} as const;
+
 export interface UserUpdate {
   username?: string;
   password?: string;
   name?: string;
   role?: UserUpdateRole;
+  phone?: string;
+  status?: UserUpdateStatus;
+}
+
+export type GoogleSyncResultStatus = typeof GoogleSyncResultStatus[keyof typeof GoogleSyncResultStatus];
+
+
+export const GoogleSyncResultStatus = {
+  approved: 'approved',
+  pending: 'pending',
+} as const;
+
+export interface GoogleSyncResult {
+  status: GoogleSyncResultStatus;
+  user?: User;
 }
 
 export interface Category {

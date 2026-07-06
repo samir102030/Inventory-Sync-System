@@ -30,6 +30,10 @@ export const LoginResponse = zod.object({
   "username": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'cashier']),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "status": zod.enum(['active', 'pending']),
+  "loginMethod": zod.enum(['password', 'google']).optional(),
   "createdAt": zod.string()
 })
 })
@@ -43,7 +47,30 @@ export const GetMeResponse = zod.object({
   "username": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'cashier']),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "status": zod.enum(['active', 'pending']),
+  "loginMethod": zod.enum(['password', 'google']).optional(),
   "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Sync Clerk Google sign-in with local user account
+ */
+export const GoogleSyncResponse = zod.object({
+  "status": zod.enum(['approved', 'pending']),
+  "user": zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['admin', 'cashier']),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "status": zod.enum(['active', 'pending']),
+  "loginMethod": zod.enum(['password', 'google']).optional(),
+  "createdAt": zod.string()
+}).optional()
 })
 
 
@@ -55,6 +82,10 @@ export const GetUsersResponseItem = zod.object({
   "username": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'cashier']),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "status": zod.enum(['active', 'pending']),
+  "loginMethod": zod.enum(['password', 'google']).optional(),
   "createdAt": zod.string()
 })
 export const GetUsersResponse = zod.array(GetUsersResponseItem)
@@ -67,7 +98,8 @@ export const CreateUserBody = zod.object({
   "username": zod.string(),
   "password": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['admin', 'cashier'])
+  "role": zod.enum(['admin', 'cashier']),
+  "phone": zod.string().optional()
 })
 
 
@@ -83,6 +115,10 @@ export const GetUserResponse = zod.object({
   "username": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'cashier']),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "status": zod.enum(['active', 'pending']),
+  "loginMethod": zod.enum(['password', 'google']).optional(),
   "createdAt": zod.string()
 })
 
@@ -98,7 +134,9 @@ export const UpdateUserBody = zod.object({
   "username": zod.string().optional(),
   "password": zod.string().optional(),
   "name": zod.string().optional(),
-  "role": zod.enum(['admin', 'cashier']).optional()
+  "role": zod.enum(['admin', 'cashier']).optional(),
+  "phone": zod.string().optional(),
+  "status": zod.enum(['active', 'pending']).optional()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -106,6 +144,10 @@ export const UpdateUserResponse = zod.object({
   "username": zod.string(),
   "name": zod.string(),
   "role": zod.enum(['admin', 'cashier']),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "status": zod.enum(['active', 'pending']),
+  "loginMethod": zod.enum(['password', 'google']).optional(),
   "createdAt": zod.string()
 })
 

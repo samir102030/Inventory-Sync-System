@@ -18,14 +18,102 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Edit, Trash2, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { User, UserInputRole } from "@workspace/api-client-react/src/generated/api.schemas";
+
+function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
+  const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [roleById, setRoleById] = useState<Record<number, UserInputRole>>({});
+
+  if (pendingUsers.length === 0) return null;
+
+  const handleApprove = (user: User) => {
+    updateUser.mutate(
+      { id: user.id, data: { status: "active", role: roleById[user.id] || "cashier" } },
+      {
+        onSuccess: () => {
+          toast({ title: "تم قبول المستخدم" });
+          queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
+        },
+      }
+    );
+  };
+
+  const handleReject = (user: User) => {
+    if (confirm(`هل تريد رفض طلب ${user.name}؟`)) {
+      deleteUser.mutate(
+        { id: user.id },
+        {
+          onSuccess: () => {
+            toast({ title: "تم رفض الطلب" });
+            queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
+          },
+        }
+      );
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>طلبات تسجيل بحساب جوجل</CardTitle>
+        <CardDescription>بانتظار موافقتك قبل تفعيل الوصول للنظام</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>الاسم</TableHead>
+              <TableHead>البريد الإلكتروني</TableHead>
+              <TableHead>الصلاحية</TableHead>
+              <TableHead className="w-[120px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pendingUsers.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="font-medium">{user.name}</TableCell>
+                <TableCell dir="ltr" className="text-right">{user.email}</TableCell>
+                <TableCell>
+                  <Select
+                    value={roleById[user.id] || "cashier"}
+                    onValueChange={(v) => setRoleById({ ...roleById, [user.id]: v as UserInputRole })}
+                  >
+                    <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">مدير النظام</SelectItem>
+                      <SelectItem value="cashier">كاشير</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleApprove(user)}>
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleReject(user)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
 
 function UsersManagement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formData, setFormData] = useState({ username: "", password: "", name: "", role: "cashier" as UserInputRole });
+  const [formData, setFormData] = useState({ username: "", password: "", name: "", role: "cashier" as UserInputRole, phone: "" });
 
   const { data: users, isLoading } = useGetUsers();
   const createUser = useCreateUser();
@@ -34,13 +122,16 @@ function UsersManagement() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const activeUsers = users?.filter((u) => u.status !== "pending") ?? [];
+  const pendingUsers = users?.filter((u) => u.status === "pending") ?? [];
+
   const handleOpenDialog = (user?: User) => {
     if (user) {
       setEditingUser(user);
-      setFormData({ username: user.username, password: "", name: user.name, role: user.role as UserInputRole });
+      setFormData({ username: user.username, password: "", name: user.name, role: user.role as UserInputRole, phone: user.phone || "" });
     } else {
       setEditingUser(null);
-      setFormData({ username: "", password: "", name: "", role: "cashier" });
+      setFormData({ username: "", password: "", name: "", role: "cashier", phone: "" });
     }
     setIsDialogOpen(true);
   };
@@ -51,6 +142,7 @@ function UsersManagement() {
       username: formData.username,
       name: formData.name,
       role: formData.role,
+      phone: formData.phone,
       ...(formData.password ? { password: formData.password } : {})
     };
 
@@ -89,89 +181,105 @@ function UsersManagement() {
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>إدارة المستخدمين</CardTitle>
-          <CardDescription>إضافة وتعديل صلاحيات النظام</CardDescription>
-        </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4 ml-2" />
-          إضافة مستخدم
-        </Button>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>الاسم</TableHead>
-              <TableHead>اسم المستخدم</TableHead>
-              <TableHead>الصلاحية</TableHead>
-              <TableHead className="w-[100px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={4} className="text-center h-24">جاري التحميل...</TableCell></TableRow>
-            ) : (
-              users?.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell>{user.username}</TableCell>
-                  <TableCell>{user.role === 'admin' ? 'مدير النظام' : 'كاشير'}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(user)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(user.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
+    <div className="space-y-6">
+      <PendingApprovals pendingUsers={pendingUsers} />
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>{editingUser ? "تعديل مستخدم" : "إضافة مستخدم جديد"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label>الاسم الكامل</Label>
-              <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-            </div>
-            <div className="space-y-2">
-              <Label>اسم الدخول</Label>
-              <Input value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} dir="ltr" className="text-right" required />
-            </div>
-            <div className="space-y-2">
-              <Label>كلمة المرور {editingUser && "(اتركها فارغة إذا لم ترد التغيير)"}</Label>
-              <Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} dir="ltr" className="text-right" required={!editingUser} />
-            </div>
-            <div className="space-y-2">
-              <Label>الصلاحية</Label>
-              <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v as UserInputRole})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">مدير النظام</SelectItem>
-                  <SelectItem value="cashier">كاشير</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>إلغاء</Button>
-              <Button type="submit" disabled={createUser.isPending || updateUser.isPending}>حفظ</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </Card>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>إدارة المستخدمين</CardTitle>
+            <CardDescription>إضافة وتعديل صلاحيات النظام</CardDescription>
+          </div>
+          <Button onClick={() => handleOpenDialog()}>
+            <Plus className="mr-2 h-4 w-4 ml-2" />
+            إضافة مستخدم
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>الاسم</TableHead>
+                <TableHead>اسم المستخدم</TableHead>
+                <TableHead>رقم الهاتف</TableHead>
+                <TableHead>طريقة الدخول</TableHead>
+                <TableHead>الصلاحية</TableHead>
+                <TableHead className="w-[100px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={6} className="text-center h-24">جاري التحميل...</TableCell></TableRow>
+              ) : (
+                activeUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.username}</TableCell>
+                    <TableCell dir="ltr" className="text-right">{user.phone || "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={user.loginMethod === "google" ? "secondary" : "outline"}>
+                        {user.loginMethod === "google" ? "جوجل" : "كلمة مرور"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{user.role === 'admin' ? 'مدير النظام' : 'كاشير'}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(user)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(user.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent dir="rtl">
+            <DialogHeader>
+              <DialogTitle>{editingUser ? "تعديل مستخدم" : "إضافة مستخدم جديد"}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>الاسم الكامل</Label>
+                <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+              </div>
+              <div className="space-y-2">
+                <Label>اسم الدخول</Label>
+                <Input value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} dir="ltr" className="text-right" required />
+              </div>
+              <div className="space-y-2">
+                <Label>رقم الهاتف</Label>
+                <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} dir="ltr" className="text-right" />
+              </div>
+              <div className="space-y-2">
+                <Label>كلمة المرور {editingUser && "(اتركها فارغة إذا لم ترد التغيير)"}</Label>
+                <Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} dir="ltr" className="text-right" required={!editingUser} />
+              </div>
+              <div className="space-y-2">
+                <Label>الصلاحية</Label>
+                <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v as UserInputRole})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">مدير النظام</SelectItem>
+                    <SelectItem value="cashier">كاشير</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>إلغاء</Button>
+                <Button type="submit" disabled={createUser.isPending || updateUser.isPending}>حفظ</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </Card>
+    </div>
   );
 }
 

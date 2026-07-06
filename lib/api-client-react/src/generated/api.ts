@@ -40,6 +40,7 @@ import type {
   GetInvoicesParams,
   GetProductsParams,
   GetSalesByCategoryParams,
+  GoogleSyncResult,
   HealthStatus,
   Invoice,
   InvoiceDetail,
@@ -365,6 +366,76 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+
+export const getGoogleSyncUrl = () => {
+
+
+
+
+  return `/api/auth/google-sync`
+}
+
+/**
+ * @summary Sync Clerk Google sign-in with local user account
+ */
+export const googleSync = async ( options?: RequestInit): Promise<GoogleSyncResult> => {
+
+  return customFetch<GoogleSyncResult>(getGoogleSyncUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getGoogleSyncMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof googleSync>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof googleSync>>, TError,void, TContext> => {
+
+const mutationKey = ['googleSync'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof googleSync>>, void> = () => {
+
+
+          return  googleSync(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GoogleSyncMutationResult = NonNullable<Awaited<ReturnType<typeof googleSync>>>
+
+    export type GoogleSyncMutationError = ErrorType<void>
+
+    /**
+ * @summary Sync Clerk Google sign-in with local user account
+ */
+export const useGoogleSync = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof googleSync>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof googleSync>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGoogleSyncMutationOptions(options));
+    }
 
 export const getGetUsersUrl = () => {
 

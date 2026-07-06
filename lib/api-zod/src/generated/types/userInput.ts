@@ -12,4 +12,5 @@ export interface UserInput {
   password: string;
   name: string;
   role: UserInputRole;
+  phone?: string;
 }

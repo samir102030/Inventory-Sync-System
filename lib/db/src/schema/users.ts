@@ -5,9 +5,13 @@ import { z } from "zod/v4";
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  passwordHash: text("password_hash"),
   name: text("name").notNull(),
   role: text("role").notNull().default("cashier"),
+  email: text("email").unique(),
+  phone: text("phone"),
+  clerkUserId: text("clerk_user_id").unique(),
+  status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

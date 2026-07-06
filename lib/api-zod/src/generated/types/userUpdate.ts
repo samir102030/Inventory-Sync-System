@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UserUpdateRole } from './userUpdateRole';
+import type { UserUpdateStatus } from './userUpdateStatus';
 
 export interface UserUpdate {
   username?: string;
   password?: string;
   name?: string;
   role?: UserUpdateRole;
+  phone?: string;
+  status?: UserUpdateStatus;
 }
