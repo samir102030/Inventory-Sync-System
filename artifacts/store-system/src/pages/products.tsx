@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import * as XLSX from "@e965/xlsx";
 import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useGetCategories, getGetProductsQueryKey } from "@workspace/api-client-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Edit, Trash2, Upload, Download, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Upload, Download, CheckCircle, XCircle, AlertCircle, SlidersHorizontal, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -92,6 +92,12 @@ function parseExcelRows(data: unknown[][]): ImportRow[] {
 
 export default function Products() {
   const [search, setSearch] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterPriceMin, setFilterPriceMin] = useState("");
+  const [filterPriceMax, setFilterPriceMax] = useState("");
+  const [filterCostMin, setFilterCostMin] = useState("");
+  const [filterCostMax, setFilterCostMax] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
@@ -102,6 +108,28 @@ export default function Products() {
 
   const { data: products, isLoading } = useGetProducts({ search }, { query: { queryKey: getGetProductsQueryKey({ search }) } });
   const { data: categories } = useGetCategories();
+
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
+    return products.filter(p => {
+      if (filterCategory !== "all" && String(p.categoryId) !== filterCategory) return false;
+      if (filterPriceMin !== "" && p.price < Number(filterPriceMin)) return false;
+      if (filterPriceMax !== "" && p.price > Number(filterPriceMax)) return false;
+      if (filterCostMin !== "" && (p.costPrice ?? 0) < Number(filterCostMin)) return false;
+      if (filterCostMax !== "" && (p.costPrice ?? 0) > Number(filterCostMax)) return false;
+      return true;
+    });
+  }, [products, filterCategory, filterPriceMin, filterPriceMax, filterCostMin, filterCostMax]);
+
+  const hasActiveFilters = filterCategory !== "all" || filterPriceMin !== "" || filterPriceMax !== "" || filterCostMin !== "" || filterCostMax !== "";
+
+  const clearFilters = () => {
+    setFilterCategory("all");
+    setFilterPriceMin("");
+    setFilterPriceMax("");
+    setFilterCostMin("");
+    setFilterCostMax("");
+  };
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -193,11 +221,72 @@ export default function Products() {
       </div>
 
       <Card>
-        <CardHeader className="p-4">
-          <div className="relative max-w-sm">
-            <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="ابحث عن منتج..." value={search} onChange={e => setSearch(e.target.value)} className="pr-9" />
+        <CardHeader className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="ابحث عن منتج..." value={search} onChange={e => setSearch(e.target.value)} className="pr-9" />
+            </div>
+            <Button
+              variant={showFilters ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowFilters(v => !v)}
+              className="gap-2 shrink-0"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              فلترة
+              {hasActiveFilters && <Badge className="h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">{[filterCategory !== "all", filterPriceMin, filterPriceMax, filterCostMin, filterCostMax].filter(Boolean).length}</Badge>}
+            </Button>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-muted-foreground shrink-0">
+                <X className="h-4 w-4" />
+                مسح
+              </Button>
+            )}
           </div>
+
+          {showFilters && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">القسم</label>
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="كل الأقسام" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الأقسام</SelectItem>
+                    {categories?.map(c => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">السعر (ج.م)</label>
+                <div className="flex gap-1 items-center">
+                  <Input type="number" min="0" placeholder="من" value={filterPriceMin} onChange={e => setFilterPriceMin(e.target.value)} className="h-9 text-sm" />
+                  <span className="text-muted-foreground text-xs shrink-0">—</span>
+                  <Input type="number" min="0" placeholder="إلى" value={filterPriceMax} onChange={e => setFilterPriceMax(e.target.value)} className="h-9 text-sm" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">التكلفة (ج.م)</label>
+                <div className="flex gap-1 items-center">
+                  <Input type="number" min="0" placeholder="من" value={filterCostMin} onChange={e => setFilterCostMin(e.target.value)} className="h-9 text-sm" />
+                  <span className="text-muted-foreground text-xs shrink-0">—</span>
+                  <Input type="number" min="0" placeholder="إلى" value={filterCostMax} onChange={e => setFilterCostMax(e.target.value)} className="h-9 text-sm" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasActiveFilters && (
+            <p className="text-xs text-muted-foreground">
+              عرض <span className="font-semibold text-foreground">{filteredProducts.length}</span> من {products?.length ?? 0} منتج
+            </p>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -216,9 +305,9 @@ export default function Products() {
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={8} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
-              ) : products?.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center h-24 text-muted-foreground">لا توجد منتجات</TableCell></TableRow>
-              ) : products?.map(product => (
+              ) : filteredProducts.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="text-center h-24 text-muted-foreground">لا توجد منتجات تطابق الفلتر</TableCell></TableRow>
+              ) : filteredProducts.map(product => (
                 <TableRow key={product.id}>
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>{product.categoryName}</TableCell>

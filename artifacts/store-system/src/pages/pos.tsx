@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useGetProducts, useGetCustomers, useCreateInvoice, getGetProductsQueryKey, getGetSummaryQueryKey } from "@workspace/api-client-react";
+import { useGetProducts, useGetCustomers, useCreateInvoice, useGetCategories, getGetProductsQueryKey, getGetSummaryQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).t
 
 export default function POS() {
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
   const [paymentMethod, setPaymentMethod] = useState<InvoiceInputPaymentMethod>("cash");
@@ -35,6 +36,7 @@ export default function POS() {
 
   const { data: products } = useGetProducts({ search }, { query: { enabled: search.length > 2 } });
   const { data: allProducts } = useGetProducts({}, { query: { enabled: true } });
+  const { data: categories } = useGetCategories();
   const { data: customers } = useGetCustomers({});
   const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const createInvoice = useCreateInvoice();
@@ -162,40 +164,65 @@ export default function POS() {
       {/* Products Area */}
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
         <Card className="flex-none">
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-3">
             <div className="relative">
               <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 ref={searchInputRef}
                 placeholder="ابحث عن منتج (الاسم أو الباركود)..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); if (e.target.value) setSelectedCategory(null); }}
                 className="pr-9"
               />
             </div>
+            {categories && categories.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => { setSelectedCategory(null); setSearch(""); }}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${selectedCategory === null && !search ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:bg-muted"}`}
+                >
+                  الكل
+                </button>
+                {categories.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => { setSelectedCategory(cat.id); setSearch(""); }}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${selectedCategory === cat.id ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:bg-muted"}`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <div className="flex-1 overflow-auto">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {(search.length > 2 ? products : allProducts)?.slice(0, 20).map(product => (
-              <Card 
-                key={product.id} 
-                className="cursor-pointer hover:border-primary hover-elevate transition-colors"
-                onClick={() => addToCart(product)}
-              >
-                <CardContent className="p-4 flex flex-col h-full justify-between gap-2">
-                  <div>
-                    <h3 className="font-medium text-sm line-clamp-2" title={product.name}>{product.name}</h3>
-                    <p className="text-xs text-muted-foreground">{product.categoryName}</p>
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="font-bold text-primary">{product.price} ج.م</span>
-                    <span className="text-xs bg-muted px-2 py-1 rounded">المخزون: {product.stock}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {(() => {
+              let list = search.length > 2 ? (products ?? []) : (allProducts ?? []);
+              if (selectedCategory !== null && search.length <= 2) {
+                list = list.filter(p => p.categoryId === selectedCategory);
+              }
+              return list.slice(0, 40).map(product => (
+                <Card
+                  key={product.id}
+                  className="cursor-pointer hover:border-primary hover-elevate transition-colors"
+                  onClick={() => addToCart(product)}
+                >
+                  <CardContent className="p-4 flex flex-col h-full justify-between gap-2">
+                    <div>
+                      <h3 className="font-medium text-sm line-clamp-2" title={product.name}>{product.name}</h3>
+                      <p className="text-xs text-muted-foreground">{product.categoryName}</p>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="font-bold text-primary">{product.price} ج.م</span>
+                      <span className="text-xs bg-muted px-2 py-1 rounded">المخزون: {product.stock}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ));
+            })()}
           </div>
         </div>
       </div>
