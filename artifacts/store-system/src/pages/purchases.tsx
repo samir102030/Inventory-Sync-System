@@ -9,13 +9,14 @@ import { Plus, Trash2, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 
 type Supplier = { id: number; name: string };
 type Product = { id: number; name: string; costPrice?: number };
 type Account = { id: number; name: string };
 type PurchaseItem = { productId: number; productName: string; quantity: number; unitCost: number; total: number };
-type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; date: string; paymentMethod?: string; accountId?: number | null; notes?: string | null; createdAt: string };
+type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; date: string; paymentMethod?: string; accountId?: number | null; notes?: string | null; isTaxable?: number; createdAt: string };
 
 const BASE = "/api";
 const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
@@ -33,6 +34,7 @@ export default function Purchases() {
   const [itemCost, setItemCost] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "credit">("cash");
   const [accountId, setAccountId] = useState<string>("");
+  const [isTaxable, setIsTaxable] = useState(false);
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -53,7 +55,7 @@ export default function Purchases() {
     onSuccess: () => { toast({ title: "تم حذف الطلب" }); qc.invalidateQueries({ queryKey: ["purchases"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); },
   });
 
-  const resetForm = () => { setSupplierId(""); setSupplierName(""); setDate(format(new Date(), "yyyy-MM-dd")); setNotes(""); setItems([]); setSelectedProductId(""); setItemQty("1"); setItemCost(""); setPaymentMethod("cash"); setAccountId(accounts[0] ? String(accounts[0].id) : ""); };
+  const resetForm = () => { setSupplierId(""); setSupplierName(""); setDate(format(new Date(), "yyyy-MM-dd")); setNotes(""); setItems([]); setSelectedProductId(""); setItemQty("1"); setItemCost(""); setPaymentMethod("cash"); setAccountId(accounts[0] ? String(accounts[0].id) : ""); setIsTaxable(false); };
 
   const addItem = () => {
     if (!selectedProductId || !itemQty || !itemCost) return;
@@ -86,6 +88,7 @@ export default function Purchases() {
       items,
       paymentMethod,
       accountId: paymentMethod === "cash" ? Number(accountId) : undefined,
+      isTaxable,
     });
   };
 
@@ -114,16 +117,17 @@ export default function Purchases() {
                 <TableHead>رقم الطلب</TableHead>
                 <TableHead>المورد</TableHead>
                 <TableHead>التاريخ</TableHead>
-                <TableHead>طريقة الدفع</TableHead>
+                <TableHead>الدفع</TableHead>
+                <TableHead>النوع</TableHead>
                 <TableHead>الإجمالي (ج.م)</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
               ) : purchases?.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">لا توجد مشتريات</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">لا توجد مشتريات</TableCell></TableRow>
               ) : purchases?.map(p => (
                 <TableRow key={p.id}>
                   <TableCell className="font-mono font-bold">{p.purchaseNumber}</TableCell>
@@ -134,6 +138,13 @@ export default function Purchases() {
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">آجل</span>
                     ) : (
                       <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">نقدي</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {p.isTaxable ? (
+                      <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">ضريبي</span>
+                    ) : (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">عادي</span>
                     )}
                   </TableCell>
                   <TableCell className="font-bold text-blue-600">{p.total.toFixed(2)} ج.م</TableCell>
@@ -193,6 +204,18 @@ export default function Purchases() {
                   </Select>
                 </div>
               )}
+            </div>
+
+            <div className="flex items-center gap-3 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3">
+              <Checkbox
+                id="isTaxable"
+                checked={isTaxable}
+                onCheckedChange={(v) => setIsTaxable(!!v)}
+              />
+              <div>
+                <Label htmlFor="isTaxable" className="cursor-pointer font-semibold text-purple-800">مشتريات ضريبية (VAT)</Label>
+                <p className="text-xs text-purple-600">عند التفعيل، ستُضاف الكميات إلى المخزن الضريبي المنفصل بدلاً من المخزن العادي</p>
+              </div>
             </div>
 
             <Card>

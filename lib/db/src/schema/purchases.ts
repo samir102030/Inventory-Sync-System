@@ -13,6 +13,7 @@ export const purchasesTable = pgTable("purchases", {
   paymentMethod: text("payment_method").notNull().default("cash"),
   accountId: integer("account_id").references(() => accountsTable.id),
   notes: text("notes"),
+  isTaxable: integer("is_taxable").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

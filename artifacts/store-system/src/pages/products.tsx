@@ -207,16 +207,17 @@ export default function Products() {
                 <TableHead>القسم</TableHead>
                 <TableHead>السعر (ج.م)</TableHead>
                 <TableHead>التكلفة (ج.م)</TableHead>
-                <TableHead>المخزون</TableHead>
+                <TableHead>مخزون عادي</TableHead>
+                <TableHead>مخزون ضريبي</TableHead>
                 <TableHead>الباركود</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
               ) : products?.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">لا توجد منتجات</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center h-24 text-muted-foreground">لا توجد منتجات</TableCell></TableRow>
               ) : products?.map(product => (
                 <TableRow key={product.id}>
                   <TableCell className="font-medium">{product.name}</TableCell>
@@ -227,6 +228,11 @@ export default function Products() {
                     {product.stock <= (product.minStock || 0)
                       ? <Badge variant="destructive">{product.stock}</Badge>
                       : <Badge variant="secondary">{product.stock}</Badge>}
+                  </TableCell>
+                  <TableCell>
+                    {(product as any).taxStock > 0
+                      ? <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">{(product as any).taxStock}</Badge>
+                      : <span className="text-muted-foreground text-sm">0</span>}
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-sm">{product.barcode || "-"}</TableCell>
                   <TableCell>

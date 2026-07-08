@@ -14,6 +14,7 @@ function formatProduct(p: any, categoryName?: string | null) {
     categoryId: p.categoryId,
     categoryName: categoryName ?? null,
     stock: p.stock,
+    taxStock: p.taxStock ?? 0,
     minStock: p.minStock,
     barcode: p.barcode ?? null,
     unit: p.unit,

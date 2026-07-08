@@ -11,6 +11,7 @@ export const productsTable = pgTable("products", {
   costPrice: numeric("cost_price", { precision: 12, scale: 2 }),
   categoryId: integer("category_id").notNull().references(() => categoriesTable.id),
   stock: integer("stock").notNull().default(0),
+  taxStock: integer("tax_stock").notNull().default(0),
   minStock: integer("min_stock").notNull().default(5),
   barcode: text("barcode"),
   unit: text("unit").notNull().default("قطعة"),

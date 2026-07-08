@@ -41,7 +41,7 @@ router.get("/purchases/:id", async (req, res) => {
 });
 
 router.post("/purchases", async (req, res) => {
-  const { supplierId, supplierName, date, notes, items, paymentMethod, accountId } = req.body;
+  const { supplierId, supplierName, date, notes, items, paymentMethod, accountId, isTaxable } = req.body;
   if (!date || !items?.length) return res.status(400).json({ error: "date and items required" });
   if (paymentMethod === "credit" && !supplierId) return res.status(400).json({ error: "supplierId is required for credit purchases" });
 
@@ -57,6 +57,8 @@ router.post("/purchases", async (req, res) => {
 
   const method = paymentMethod === "credit" ? "credit" : "cash";
 
+  const taxable = isTaxable ? 1 : 0;
+
   const [purchase] = await db.insert(purchasesTable).values({
     purchaseNumber,
     supplierId: supplierId ?? null,
@@ -66,6 +68,7 @@ router.post("/purchases", async (req, res) => {
     paymentMethod: method,
     accountId: accountId ? Number(accountId) : null,
     notes: notes ?? null,
+    isTaxable: taxable,
   }).returning();
 
   for (const item of items as Array<{ productId: number; productName: string; quantity: number; unitCost: number }>) {
@@ -78,10 +81,17 @@ router.post("/purchases", async (req, res) => {
       unitCost: String(item.unitCost),
       total: String(itemTotal),
     });
-    await db
-      .update(productsTable)
-      .set({ stock: sql`${productsTable.stock} + ${item.quantity}`, costPrice: String(item.unitCost) })
-      .where(eq(productsTable.id, item.productId));
+    if (taxable) {
+      await db
+        .update(productsTable)
+        .set({ taxStock: sql`${productsTable.taxStock} + ${item.quantity}`, costPrice: String(item.unitCost) })
+        .where(eq(productsTable.id, item.productId));
+    } else {
+      await db
+        .update(productsTable)
+        .set({ stock: sql`${productsTable.stock} + ${item.quantity}`, costPrice: String(item.unitCost) })
+        .where(eq(productsTable.id, item.productId));
+    }
   }
 
   if (method === "cash" && purchase.accountId && total > 0) {
