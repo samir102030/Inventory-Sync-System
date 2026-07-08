@@ -19,18 +19,6 @@ expertMode = true
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
 
-[[ports]]
-localPort = 8080
-externalPort = 80
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 24820
-externalPort = 3000
-
 [objectStorage]
 defaultBucketID = "replit-objstore-bbfecc62-4c49-48b1-8b60-d188b363d6f4"
 
