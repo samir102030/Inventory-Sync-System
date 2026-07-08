@@ -18,6 +18,7 @@ function formatInvoice(inv: any, customerName?: string | null, customerWhatsapp?
     total: Number(inv.total),
     paymentMethod: inv.paymentMethod,
     status: inv.status,
+    isTaxable: Number(inv.isTaxable ?? 0),
     notes: inv.notes ?? null,
     createdBy: inv.createdBy ?? null,
     createdAt: inv.createdAt instanceof Date ? inv.createdAt.toISOString() : inv.createdAt,
@@ -72,7 +73,7 @@ router.get("/invoices", async (req, res) => {
 });
 
 router.post("/invoices", async (req, res) => {
-  const { customerId, accountId, items, discount, tax, paymentMethod, status, notes } = req.body;
+  const { customerId, accountId, items, discount, tax, paymentMethod, status, notes, isTaxable } = req.body;
   if (!items?.length || !paymentMethod) return res.status(400).json({ error: "items and paymentMethod required" });
   if (paymentMethod === "credit" && !customerId) return res.status(400).json({ error: "customerId is required for credit sales" });
 
