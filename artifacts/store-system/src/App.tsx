@@ -28,6 +28,7 @@ import Accounts from "@/pages/accounts";
 import CreditAccounts from "@/pages/credit-accounts";
 import WhatsAppBroadcast from "@/pages/whatsapp-broadcast";
 import Warehouses from "@/pages/warehouses";
+import ProductTracking from "@/pages/product-tracking";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ function Router() {
       <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
       <Route path="/credit-accounts"><ProtectedRoute component={CreditAccounts} /></Route>
       <Route path="/warehouses"><ProtectedRoute component={Warehouses} /></Route>
+      <Route path="/product-tracking"><ProtectedRoute component={ProductTracking} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

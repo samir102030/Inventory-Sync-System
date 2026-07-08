@@ -71,12 +71,19 @@ router.post("/purchases", async (req, res) => {
     isTaxable: taxable,
   }).returning();
 
-  for (const item of items as Array<{ productId: number; productName: string; quantity: number; unitCost: number }>) {
+  for (const item of items as Array<{ productId: number; productName: string; barcode?: string; quantity: number; unitCost: number }>) {
     const itemTotal = item.quantity * item.unitCost;
+    // fetch barcode if not provided
+    let barcode = item.barcode ?? null;
+    if (!barcode) {
+      const [prod] = await db.select({ barcode: productsTable.barcode }).from(productsTable).where(eq(productsTable.id, item.productId)).limit(1);
+      barcode = prod?.barcode ?? null;
+    }
     await db.insert(purchaseItemsTable).values({
       purchaseId: purchase.id,
       productId: item.productId,
       productName: item.productName,
+      barcode,
       quantity: String(item.quantity),
       unitCost: String(item.unitCost),
       total: String(itemTotal),

@@ -96,7 +96,7 @@ router.post("/invoices", async (req, res) => {
     const itemDiscount = Number(item.discount ?? 0);
     const itemTotal = qty * price - itemDiscount;
     subtotal += itemTotal;
-    resolvedItems.push({ productId: product.id, productName: product.name, quantity: qty, unitPrice: price, discount: itemDiscount, total: itemTotal });
+    resolvedItems.push({ productId: product.id, productName: product.name, barcode: product.barcode ?? null, quantity: qty, unitPrice: price, discount: itemDiscount, total: itemTotal });
   }
 
   const discountAmt = Number(discount ?? 0);
@@ -122,6 +122,7 @@ router.post("/invoices", async (req, res) => {
       invoiceId: inv.id,
       productId: item.productId,
       productName: item.productName,
+      barcode: item.barcode,
       quantity: String(item.quantity),
       unitPrice: String(item.unitPrice),
       discount: String(item.discount),
@@ -186,6 +187,7 @@ router.get("/invoices/:id", async (req, res) => {
     id: i.id,
     productId: i.productId,
     productName: i.productName,
+    barcode: i.barcode ?? null,
     quantity: Number(i.quantity),
     unitPrice: Number(i.unitPrice),
     discount: Number(i.discount),

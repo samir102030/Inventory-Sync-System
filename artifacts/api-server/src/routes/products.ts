@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, productsTable, categoriesTable } from "@workspace/db";
-import { eq, and, ilike, lte, sql } from "drizzle-orm";
+import { db, productsTable, categoriesTable, invoiceItemsTable, invoicesTable, purchaseItemsTable, purchasesTable, customersTable } from "@workspace/db";
+import { eq, and, ilike, lte, sql, or } from "drizzle-orm";
 
 const router = Router();
 
@@ -66,6 +66,43 @@ router.post("/products", async (req, res) => {
 
   const cats = await db.select().from(categoriesTable).where(eq(categoriesTable.id, p.categoryId)).limit(1);
   return res.status(201).json(formatProduct(p, cats[0]?.name));
+});
+
+router.get("/products/tracking", async (req, res) => {
+  const q = String(req.query.q ?? "").trim();
+  if (!q) return res.json([]);
+
+  const matches = await db
+    .select({ id: productsTable.id, name: productsTable.name, barcode: productsTable.barcode, stock: productsTable.stock, price: productsTable.price, costPrice: productsTable.costPrice })
+    .from(productsTable)
+    .where(or(ilike(productsTable.name, `%${q}%`), eq(productsTable.barcode, q)));
+
+  const results = await Promise.all(matches.map(async product => {
+    const saleRows = await db
+      .select({ invoiceId: invoiceItemsTable.invoiceId, invoiceNumber: invoicesTable.invoiceNumber, date: invoicesTable.createdAt, quantity: invoiceItemsTable.quantity, unitPrice: invoiceItemsTable.unitPrice, total: invoiceItemsTable.total, customerName: customersTable.name })
+      .from(invoiceItemsTable)
+      .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
+      .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+      .where(eq(invoiceItemsTable.productId, product.id))
+      .orderBy(sql`${invoicesTable.createdAt} DESC`);
+
+    const purchaseRows = await db
+      .select({ purchaseId: purchaseItemsTable.purchaseId, purchaseNumber: purchasesTable.purchaseNumber, date: purchasesTable.date, quantity: purchaseItemsTable.quantity, unitCost: purchaseItemsTable.unitCost, total: purchaseItemsTable.total, supplierName: purchasesTable.supplierName })
+      .from(purchaseItemsTable)
+      .innerJoin(purchasesTable, eq(purchaseItemsTable.purchaseId, purchasesTable.id))
+      .where(eq(purchaseItemsTable.productId, product.id))
+      .orderBy(sql`${purchasesTable.date} DESC`);
+
+    const sales = saleRows.map(r => ({ invoiceId: r.invoiceId, invoiceNumber: r.invoiceNumber, date: r.date instanceof Date ? r.date.toISOString() : r.date, quantity: Number(r.quantity), unitPrice: Number(r.unitPrice), total: Number(r.total), customerName: r.customerName ?? null }));
+    const purchases = purchaseRows.map(r => ({ purchaseId: r.purchaseId, purchaseNumber: r.purchaseNumber, date: r.date, quantity: Number(r.quantity), unitCost: Number(r.unitCost), total: Number(r.total), supplierName: r.supplierName ?? null }));
+    const totalSold = sales.reduce((s, r) => s + r.quantity, 0);
+    const totalPurchased = purchases.reduce((s, r) => s + r.quantity, 0);
+    const totalSalesRevenue = sales.reduce((s, r) => s + r.total, 0);
+    const totalPurchaseCost = purchases.reduce((s, r) => s + r.total, 0);
+    return { product: { id: product.id, name: product.name, barcode: product.barcode ?? null, stock: product.stock, price: Number(product.price), costPrice: product.costPrice != null ? Number(product.costPrice) : null }, sales, purchases, totalSold, totalPurchased, totalSalesRevenue, totalPurchaseCost };
+  }));
+
+  return res.json(results);
 });
 
 router.get("/products/:id", async (req, res) => {

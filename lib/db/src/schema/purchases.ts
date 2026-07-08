@@ -22,6 +22,7 @@ export const purchaseItemsTable = pgTable("purchase_items", {
   purchaseId: integer("purchase_id").notNull().references(() => purchasesTable.id, { onDelete: "cascade" }),
   productId: integer("product_id").notNull().references(() => productsTable.id),
   productName: text("product_name").notNull(),
+  barcode: text("barcode"),
   quantity: numeric("quantity", { precision: 10, scale: 3 }).notNull(),
   unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull(),
   total: numeric("total", { precision: 12, scale: 2 }).notNull(),

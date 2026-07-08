@@ -18,6 +18,7 @@ import {
   HandCoins,
   MessageCircle,
   Warehouse,
+  ScanBarcode,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -65,6 +66,7 @@ const inventoryItems = [
   { title: "المنتجات", url: "/products", icon: Package },
   { title: "الأقسام", url: "/categories", icon: Tags },
   { title: "المستودعات", url: "/warehouses", icon: Warehouse },
+  { title: "تتبع المنتج", url: "/product-tracking", icon: ScanBarcode },
 ];
 
 const crmItems = [
