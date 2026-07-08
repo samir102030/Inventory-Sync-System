@@ -16,6 +16,7 @@ import {
   ArrowUpCircle,
   Landmark,
   HandCoins,
+  MessageCircle,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -66,6 +67,7 @@ const inventoryItems = [
 
 const crmItems = [
   { title: "العملاء", url: "/customers", icon: Users },
+  { title: "رسائل واتساب", url: "/whatsapp", icon: MessageCircle },
 ];
 
 const otherItems = [
