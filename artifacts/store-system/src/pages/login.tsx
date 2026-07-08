@@ -1,11 +1,11 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useLogin, useGetMe } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { useSignIn } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,7 +18,7 @@ export default function Login() {
   const { toast } = useToast();
   const loginMutation = useLogin();
   const { data: user } = useGetMe();
-  const { signIn, isLoaded: isClerkLoaded } = useSignIn();
+  const { signIn, fetchStatus } = useSignIn();
 
   if (user) {
     setLocation("/dashboard");
@@ -45,11 +45,10 @@ export default function Login() {
   };
 
   const handleGoogleSignIn = () => {
-    if (!signIn) return;
-    signIn.authenticateWithRedirect({
+    signIn.sso({
       strategy: "oauth_google",
-      redirectUrl: `${basePath}/sign-in/sso-callback`,
-      redirectUrlComplete: `${basePath}/`,
+      redirectUrl: `${basePath}/`,
+      redirectCallbackUrl: `${basePath}/sign-in/sso-callback`,
     });
   };
 
@@ -113,7 +112,7 @@ export default function Login() {
             type="button"
             variant="outline"
             className="w-full"
-            disabled={!isClerkLoaded}
+            disabled={fetchStatus === "fetching"}
             onClick={handleGoogleSignIn}
           >
             <svg className="ml-2 h-4 w-4" viewBox="0 0 24 24">
