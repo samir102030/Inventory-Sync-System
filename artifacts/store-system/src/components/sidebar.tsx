@@ -17,6 +17,7 @@ import {
   Landmark,
   HandCoins,
   MessageCircle,
+  Warehouse,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -63,6 +64,7 @@ const financeItems = [
 const inventoryItems = [
   { title: "المنتجات", url: "/products", icon: Package },
   { title: "الأقسام", url: "/categories", icon: Tags },
+  { title: "المستودعات", url: "/warehouses", icon: Warehouse },
 ];
 
 const crmItems = [
