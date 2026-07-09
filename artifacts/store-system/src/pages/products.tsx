@@ -125,6 +125,8 @@ export default function Products() {
   const [importResult, setImportResult] = useState<{ created: number; failed: number; errors: string[] } | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({ name: "", categoryId: "", price: "", costPrice: "", stock: "", minStock: "", barcode: "" });
+  const [categoryText, setCategoryText] = useState("");
+  const [showCatDrop, setShowCatDrop] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: products, isLoading } = useGetProducts({ search }, { query: { queryKey: getGetProductsQueryKey({ search }) } });
@@ -198,16 +200,39 @@ export default function Products() {
     if (product) {
       setEditingProduct(product);
       setFormData({ name: product.name, categoryId: product.categoryId.toString(), price: product.price.toString(), costPrice: product.costPrice?.toString() || "", stock: product.stock.toString(), minStock: product.minStock?.toString() || "", barcode: product.barcode || "" });
+      setCategoryText(product.categoryName ?? "");
     } else {
       setEditingProduct(null);
       setFormData({ name: "", categoryId: "", price: "", costPrice: "", stock: "", minStock: "", barcode: "" });
+      setCategoryText("");
     }
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const data = { name: formData.name, categoryId: parseInt(formData.categoryId), price: parseFloat(formData.price), costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined, stock: parseInt(formData.stock), minStock: formData.minStock ? parseInt(formData.minStock) : undefined, barcode: formData.barcode || undefined };
+    let catId = formData.categoryId ? parseInt(formData.categoryId) : NaN;
+
+    if (isNaN(catId) && categoryText.trim()) {
+      const existing = categories?.find(c => c.name.trim() === categoryText.trim());
+      if (existing) {
+        catId = existing.id;
+      } else {
+        try {
+          const res = await fetch("/api/categories", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: categoryText.trim() }) });
+          const newCat = await res.json();
+          catId = newCat.id;
+          queryClient.invalidateQueries({ queryKey: ["categories"] });
+        } catch {
+          toast({ title: "فشل إنشاء القسم", variant: "destructive" });
+          return;
+        }
+      }
+    }
+
+    if (isNaN(catId)) { toast({ title: "الرجاء اختيار أو كتابة قسم", variant: "destructive" }); return; }
+
+    const data = { name: formData.name, categoryId: catId, price: parseFloat(formData.price), costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined, stock: parseInt(formData.stock), minStock: formData.minStock ? parseInt(formData.minStock) : undefined, barcode: formData.barcode || undefined };
     if (editingProduct) {
       updateProduct.mutate({ id: editingProduct.id, data }, { onSuccess: () => { toast({ title: "تم تحديث المنتج" }); queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() }); setIsDialogOpen(false); } });
     } else {
@@ -374,12 +399,38 @@ export default function Products() {
                 <Label>الاسم *</Label>
                 <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <Label>القسم *</Label>
-                <Select value={formData.categoryId} onValueChange={v => setFormData({ ...formData, categoryId: v })}>
-                  <SelectTrigger><SelectValue placeholder="اختر القسم" /></SelectTrigger>
-                  <SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
+                <Input
+                  value={categoryText}
+                  onChange={e => { setCategoryText(e.target.value); setFormData({ ...formData, categoryId: "" }); setShowCatDrop(true); }}
+                  onFocus={() => setShowCatDrop(true)}
+                  onBlur={() => setTimeout(() => setShowCatDrop(false), 150)}
+                  placeholder="اختر أو اكتب قسماً جديداً..."
+                  autoComplete="off"
+                />
+                {showCatDrop && (
+                  <div className="absolute z-50 w-full bg-popover border rounded-md shadow-md max-h-52 overflow-y-auto top-full mt-1">
+                    {categories?.filter(c => !categoryText || c.name.includes(categoryText)).map(c => (
+                      <div
+                        key={c.id}
+                        className="px-3 py-2 cursor-pointer hover:bg-accent text-sm"
+                        onMouseDown={() => { setCategoryText(c.name); setFormData({ ...formData, categoryId: c.id.toString() }); setShowCatDrop(false); }}
+                      >
+                        {c.name}
+                      </div>
+                    ))}
+                    {categoryText.trim() && !categories?.find(c => c.name.trim() === categoryText.trim()) && (
+                      <div
+                        className="px-3 py-2 cursor-pointer hover:bg-amber-50 text-sm text-amber-700 font-medium border-t flex items-center gap-2"
+                        onMouseDown={() => { setShowCatDrop(false); }}
+                      >
+                        <Plus className="h-3 w-3" />
+                        إضافة قسم جديد: &quot;{categoryText.trim()}&quot;
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>السعر (ج.م) *</Label>
