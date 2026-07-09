@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Edit, Trash2, Upload, Download, CheckCircle, XCircle, AlertCircle, SlidersHorizontal, X } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Upload, Download, CheckCircle, XCircle, AlertCircle, SlidersHorizontal, X, Square, CheckSquare, Minus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -127,6 +128,7 @@ export default function Products() {
   const [formData, setFormData] = useState({ name: "", categoryId: "", price: "", costPrice: "", stock: "", minStock: "", barcode: "" });
   const [categoryText, setCategoryText] = useState("");
   const [showCatDrop, setShowCatDrop] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: products, isLoading } = useGetProducts({ search }, { query: { queryKey: getGetProductsQueryKey({ search }) } });
@@ -246,6 +248,40 @@ export default function Products() {
     }
   };
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedIds.has(p.id));
+  const someSelected = filteredProducts.some(p => selectedIds.has(p.id)) && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(prev => { const next = new Set(prev); filteredProducts.forEach(p => next.delete(p.id)); return next; });
+    } else {
+      setSelectedIds(prev => { const next = new Set(prev); filteredProducts.forEach(p => next.add(p.id)); return next; });
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`هل أنت متأكد من حذف ${selectedIds.size} منتج؟`)) return;
+    Promise.all([...selectedIds].map(id => deleteProduct.mutateAsync({ id }))).then(() => {
+      toast({ title: `تم حذف ${selectedIds.size} منتج` });
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() });
+    });
+  };
+
+  const handleExportSelected = () => {
+    const toExport = filteredProducts.filter(p => selectedIds.has(p.id));
+    exportProducts(toExport);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -339,9 +375,36 @@ export default function Products() {
           )}
         </CardHeader>
         <CardContent className="p-0">
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 border-b">
+              <span className="text-sm font-medium text-primary">تم تحديد {selectedIds.size} منتج</span>
+              <div className="flex items-center gap-2 mr-auto">
+                <Button variant="outline" size="sm" onClick={handleExportSelected} className="gap-1">
+                  <Download className="h-3.5 w-3.5" />
+                  تصدير المحدد
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="gap-1">
+                  <Trash2 className="h-3.5 w-3.5" />
+                  حذف المحدد
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())} className="gap-1 text-muted-foreground">
+                  <X className="h-3.5 w-3.5" />
+                  إلغاء التحديد
+                </Button>
+              </div>
+            </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="تحديد الكل"
+                    className={someSelected ? "data-[state=unchecked]:bg-primary/20" : ""}
+                  />
+                </TableHead>
                 <TableHead>اسم المنتج</TableHead>
                 <TableHead>القسم</TableHead>
                 <TableHead>السعر (ج.م)</TableHead>
@@ -354,11 +417,18 @@ export default function Products() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={8} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center h-24 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
               ) : filteredProducts.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center h-24 text-muted-foreground">لا توجد منتجات تطابق الفلتر</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center h-24 text-muted-foreground">لا توجد منتجات تطابق الفلتر</TableCell></TableRow>
               ) : filteredProducts.map(product => (
-                <TableRow key={product.id}>
+                <TableRow key={product.id} className={selectedIds.has(product.id) ? "bg-primary/5" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(product.id)}
+                      onCheckedChange={() => toggleSelect(product.id)}
+                      aria-label={`تحديد ${product.name}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>{product.categoryName}</TableCell>
                   <TableCell>{product.price} ج.م</TableCell>
