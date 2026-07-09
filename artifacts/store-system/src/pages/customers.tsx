@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useGetCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, Edit, Trash2, MessageCircle, Send } from "lucide-react";
+import { Search, Plus, Edit, Trash2, MessageCircle, Send, Download, Upload } from "lucide-react";
+import { exportToExcel, parseExcelFile } from "@/lib/excel";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,12 @@ export default function Customers() {
   const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "", address: "", taxNumber: "" });
   const [bulkMsgOpen, setBulkMsgOpen] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importRows, setImportRows] = useState<string[][]>([]);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: customers, isLoading } = useGetCustomers({ search }, { query: { queryKey: getGetCustomersQueryKey({ search }) } });
   const createCustomer = useCreateCustomer();
@@ -84,21 +91,76 @@ export default function Customers() {
     openWhatsApp(wa, buildCustomMessage(customer.name, ""));
   };
 
+  const handleExport = () => {
+    const rows = (customers ?? []).map(c => [
+      c.name, c.phone ?? "", (c as any).whatsapp ?? "", c.email ?? "",
+      c.address ?? "", (c as any).taxNumber ?? "", c.totalPurchases ?? 0,
+    ]);
+    exportToExcel(["الاسم","الهاتف","واتساب","الإيميل","العنوان","الرقم الضريبي","إجمالي المشتريات"], rows, "customers", "العملاء");
+  };
+
+  const FIELD_LABELS: Record<string, string> = { name: "الاسم *", phone: "الهاتف", whatsapp: "واتساب", email: "الإيميل", address: "العنوان", taxNumber: "الرقم الضريبي" };
+
+  const autoDetect = (headers: string[]): Record<string, string> => {
+    const map: Record<string, string> = {};
+    const patterns: Record<string, RegExp> = {
+      name: /اسم|name/i, phone: /هاتف|تليفون|phone|tel|mob/i,
+      whatsapp: /whatsapp|واتس/i, email: /email|mail|بريد/i,
+      address: /عنوان|address/i, taxNumber: /ضريب|tax/i,
+    };
+    for (const [field, re] of Object.entries(patterns)) {
+      const h = headers.find(h => re.test(h));
+      if (h) map[field] = h;
+    }
+    return map;
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      const { headers, rows } = await parseExcelFile(file);
+      setImportHeaders(headers);
+      setImportRows(rows);
+      setImportMapping(autoDetect(headers));
+      setImportOpen(true);
+    } catch { toast({ title: "تعذر قراءة الملف", variant: "destructive" }); }
+    e.target.value = "";
+  };
+
+  const handleImport = async () => {
+    if (!importMapping.name) { toast({ title: "يجب تحديد عمود الاسم", variant: "destructive" }); return; }
+    setImporting(true);
+    const customers = importRows.filter(r => r[importHeaders.indexOf(importMapping.name)]?.trim()).map(r => {
+      const get = (f: string) => f && importMapping[f] ? r[importHeaders.indexOf(importMapping[f])]?.trim() || "" : "";
+      return { name: get("name"), phone: get("phone"), whatsapp: get("whatsapp"), email: get("email"), address: get("address"), taxNumber: get("taxNumber") };
+    });
+    try {
+      const res = await fetch("/api/customers/bulk-import", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customers }) });
+      const data = await res.json();
+      toast({ title: `تم استيراد ${data.created} عميل${data.skipped ? `، تم تجاهل ${data.skipped}` : ""}` });
+      queryClient.invalidateQueries({ queryKey: getGetCustomersQueryKey() });
+      setImportOpen(false);
+    } catch { toast({ title: "حدث خطأ أثناء الاستيراد", variant: "destructive" }); }
+    setImporting(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">العملاء</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {customersWithWA.length > 0 && (
             <Button variant="outline" onClick={() => setBulkMsgOpen(true)} className="text-green-600 border-green-500 hover:bg-green-50">
               <MessageCircle className="h-4 w-4 ml-2" />
               رسالة جماعية ({customersWithWA.length})
             </Button>
           )}
-          <Button onClick={() => handleOpenDialog()}>
-            <Plus className="h-4 w-4 ml-2" />
-            إضافة عميل
+          <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 ml-2" />تصدير Excel</Button>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="text-blue-600 border-blue-400 hover:bg-blue-50">
+            <Upload className="h-4 w-4 ml-2" />استيراد من Excel
           </Button>
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
+          <Button onClick={() => handleOpenDialog()}><Plus className="h-4 w-4 ml-2" />إضافة عميل</Button>
         </div>
       </div>
 
@@ -201,6 +263,41 @@ export default function Customers() {
               <Button type="submit" disabled={createCustomer.isPending || updateCustomer.isPending}>حفظ</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Dialog */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent dir="rtl" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Upload className="h-5 w-5 text-blue-600" />استيراد عملاء من Excel</DialogTitle>
+            <DialogDescription>حدد أي عمود من ملفك يقابل كل حقل</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">الأعمدة الموجودة في ملفك: <span className="font-medium text-foreground">{importHeaders.join("، ")}</span></p>
+            <p className="text-sm text-muted-foreground">عدد الصفوف: <span className="font-bold">{importRows.length}</span></p>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              {Object.entries(FIELD_LABELS).map(([field, label]) => (
+                <div key={field} className="space-y-1">
+                  <label className="text-xs font-medium">{label}</label>
+                  <select
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                    value={importMapping[field] ?? ""}
+                    onChange={e => setImportMapping(m => ({ ...m, [field]: e.target.value }))}
+                  >
+                    <option value="">— لا شيء —</option>
+                    {importHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" onClick={() => setImportOpen(false)}>إلغاء</Button>
+            <Button onClick={handleImport} disabled={importing || !importMapping.name} className="bg-blue-600 hover:bg-blue-700">
+              {importing ? "جاري الاستيراد..." : `استيراد ${importRows.length} عميل`}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

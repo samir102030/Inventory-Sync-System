@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/excel";
 import { format, differenceInDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -97,14 +98,19 @@ export default function Licenses() {
     }
   };
 
+  const handleExport = () => {
+    const rows = (licenses ?? []).map(l => [l.name, l.licenseKey, l.vendor ?? "", l.expiryDate, l.status, l.cost ?? ""]);
+    exportToExcel(["الاسم","المفتاح","المورد","تاريخ الانتهاء","الحالة","التكلفة"], rows, "licenses", "رخص البرمجيات");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">رخص البرمجيات</h1>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4 ml-2" />
-          إضافة رخصة
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 ml-2" />تصدير Excel</Button>
+          <Button onClick={() => handleOpenDialog()}><Plus className="mr-2 h-4 w-4 ml-2" />إضافة رخصة</Button>
+        </div>
       </div>
       
       <Card>

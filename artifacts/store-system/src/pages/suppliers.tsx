@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, Edit, Trash2 } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/excel";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -74,14 +75,19 @@ export default function Suppliers() {
     else createMutation.mutate(data);
   };
 
+  const handleExport = () => {
+    const rows = suppliers.map(s => [s.name, s.phone ?? "", s.whatsapp ?? "", s.address ?? "", s.taxNumber ?? "", s.notes ?? ""]);
+    exportToExcel(["الاسم","الهاتف","واتساب","العنوان","الرقم الضريبي","ملاحظات"], rows, "suppliers", "الموردون");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">الموردون</h1>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4 ml-2" />
-          إضافة مورد
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 ml-2" />تصدير Excel</Button>
+          <Button onClick={() => handleOpenDialog()}><Plus className="mr-2 h-4 w-4 ml-2" />إضافة مورد</Button>
+        </div>
       </div>
 
       <Card>

@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Printer, Eye, Edit, RotateCcw, MessageCircle } from "lucide-react";
+import { Search, Printer, Eye, Edit, RotateCcw, MessageCircle, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/excel";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
@@ -400,10 +401,21 @@ export default function Invoices() {
   const openInvoice = (id: number) => { setSelectedInvoice(id); setDialogMode("view"); };
   const closeDialog = () => { setSelectedInvoice(null); setDialogMode("view"); };
 
+  const handleExport = () => {
+    const rows = (invoices ?? []).map(inv => [
+      inv.invoiceNumber, inv.createdAt ? inv.createdAt.slice(0, 10) : "",
+      inv.customerName ?? "", inv.total, inv.discount ?? 0, inv.tax ?? 0,
+      STATUS_MAP[inv.status]?.label ?? inv.status,
+      getPaymentLabel(inv.paymentMethod ?? ""), inv.notes ?? "",
+    ]);
+    exportToExcel(["رقم الفاتورة","التاريخ","العميل","الإجمالي","الخصم","الضريبة","الحالة","طريقة الدفع","ملاحظات"], rows, "invoices", "الفواتير");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">الفواتير</h1>
+        <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 ml-2" />تصدير Excel</Button>
       </div>
 
       <Card>

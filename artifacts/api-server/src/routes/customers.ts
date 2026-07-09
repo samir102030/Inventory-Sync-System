@@ -39,6 +39,20 @@ router.post("/customers", async (req, res) => {
   return res.status(201).json({ ...c, totalPurchases: 0, createdAt: c.createdAt.toISOString() });
 });
 
+router.post("/customers/bulk-import", async (req, res) => {
+  const { customers } = req.body;
+  if (!Array.isArray(customers) || !customers.length) return res.status(400).json({ error: "customers array required" });
+  const results = { created: 0, skipped: 0 };
+  for (const c of customers) {
+    if (!c.name?.trim()) { results.skipped++; continue; }
+    try {
+      await db.insert(customersTable).values({ name: c.name.trim(), phone: c.phone || null, whatsapp: c.whatsapp || null, email: c.email || null, address: c.address || null, taxNumber: c.taxNumber || null, notes: c.notes || null });
+      results.created++;
+    } catch { results.skipped++; }
+  }
+  return res.json(results);
+});
+
 router.get("/customers/:id", async (req, res) => {
   const rows = await db.select().from(customersTable).where(eq(customersTable.id, Number(req.params.id))).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Not found" });

@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, DollarSign, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { Plus, Edit, Trash2, DollarSign, ChevronDown, ChevronUp, Search, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/excel";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = "/api";
@@ -87,6 +88,14 @@ export default function Employees() {
     onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
   });
 
+  const handleExport = () => {
+    exportToExcel(
+      ["الاسم","الوظيفة","الراتب الأساسي","الهاتف","تاريخ التعيين","الحالة","ملاحظات"],
+      employees.map(e => [e.name, e.position, e.baseSalary, e.phone ?? "", e.hireDate ?? "", e.status === "active" ? "نشط" : "غير نشط", e.notes ?? ""]),
+      "employees", "الموظفون"
+    );
+  };
+
   const openAdd = () => { setEditingEmployee(null); setForm(emptyForm); setIsFormOpen(true); };
   const openEdit = (emp: Employee) => {
     setEditingEmployee(emp);
@@ -118,7 +127,10 @@ export default function Employees() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">الموظفون</h1>
-        <Button onClick={openAdd}><Plus className="h-4 w-4 ml-2" />إضافة موظف</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 ml-2" />تصدير Excel</Button>
+          <Button onClick={openAdd}><Plus className="h-4 w-4 ml-2" />إضافة موظف</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Eye, Receipt } from "lucide-react";
+import { Plus, Trash2, Eye, Receipt, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/excel";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -103,14 +104,19 @@ export default function Purchases() {
   const taxAmount = subtotalAmount * (taxRate / 100);
   const totalAmount = subtotalAmount + taxAmount;
 
+  const handleExport = () => {
+    const rows = (purchases ?? []).map((p: Purchase) => [p.purchaseNumber, p.date, p.supplierName ?? "", p.total, p.tax ?? 0, p.paymentMethod ?? "", p.notes ?? ""]);
+    exportToExcel(["رقم المشترى","التاريخ","المورد","الإجمالي","الضريبة","طريقة الدفع","ملاحظات"], rows, "purchases", "المشتريات");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">المشتريات</h1>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4 ml-2" />
-          طلب شراء جديد
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 ml-2" />تصدير Excel</Button>
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}><Plus className="mr-2 h-4 w-4 ml-2" />طلب شراء جديد</Button>
+        </div>
       </div>
 
       <Card>

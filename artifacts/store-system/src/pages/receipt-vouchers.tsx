@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/excel";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -61,6 +62,11 @@ export default function ReceiptVouchers() {
 
   const totalAmount = vouchers?.reduce((s, v) => s + v.amount, 0) ?? 0;
 
+  const handleExport = () => {
+    const rows = (vouchers ?? []).map(v => [v.voucherNumber, v.date, v.customerName ?? "", v.amount, v.reference ?? "", v.notes ?? ""]);
+    exportToExcel(["رقم السند","التاريخ","العميل","المبلغ","المرجع","ملاحظات"], rows, "receipt_vouchers", "سندات القبض");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -68,10 +74,10 @@ export default function ReceiptVouchers() {
           <h1 className="text-3xl font-bold tracking-tight">سندات القبض</h1>
           <p className="text-sm text-muted-foreground mt-1">إجمالي المقبوضات: <span className="font-bold text-green-600">{totalAmount.toFixed(2)} ج.م</span></p>
         </div>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4 ml-2" />
-          سند قبض جديد
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 ml-2" />تصدير Excel</Button>
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}><Plus className="mr-2 h-4 w-4 ml-2" />سند قبض جديد</Button>
+        </div>
       </div>
 
       <Card>

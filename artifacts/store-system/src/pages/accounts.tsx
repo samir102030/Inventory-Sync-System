@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet, ArrowLeftRight } from "lucide-react";
+import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet, ArrowLeftRight, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/excel";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -181,6 +182,9 @@ export default function Accounts() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => { const rows = accounts.map(a => [a.name, ACCOUNT_TYPES[a.type] ?? a.type, a.initialBalance, a.totalIn, a.totalOut, a.balance, a.notes ?? ""]); exportToExcel(["الاسم","النوع","الرصيد الأولي","إجمالي الوارد","إجمالي الصادر","الرصيد الحالي","ملاحظات"], rows, "accounts", "الحسابات"); }}>
+            <Download className="h-4 w-4 ml-2" />تصدير Excel
+          </Button>
           <Button variant="outline" onClick={openTransferDialog} disabled={accounts.length < 2}>
             <ArrowLeftRight className="h-4 w-4 ml-2" />
             ترحيل بين الخزائن
