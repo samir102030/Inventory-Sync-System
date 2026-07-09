@@ -49,7 +49,7 @@ router.get("/products", async (req, res) => {
     .from(productsTable)
     .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(productsTable.name);
+    .orderBy(productsTable.categoryId, productsTable.name);
 
   return res.json(rows.map(r => formatProduct(r, r.categoryName)));
 });

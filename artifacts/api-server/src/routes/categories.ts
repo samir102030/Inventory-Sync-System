@@ -5,7 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 const router = Router();
 
 router.get("/categories", async (_req, res) => {
-  const cats = await db.select().from(categoriesTable).orderBy(categoriesTable.name);
+  const cats = await db.select().from(categoriesTable).orderBy(categoriesTable.id);
   return res.json(cats.map(c => ({ ...c, createdAt: c.createdAt.toISOString() })));
 });
 
