@@ -328,7 +328,7 @@ router.get("/invoices/:id/returns", async (req, res) => {
 });
 
 router.post("/invoices/:id/return", async (req, res) => {
-  const { reason, items } = req.body;
+  const { reason, items, accountId: overrideAccountId } = req.body;
   if (!items?.length) return res.status(400).json({ error: "items required" });
 
   const invRows = await db.select().from(invoicesTable).where(eq(invoicesTable.id, Number(req.params.id))).limit(1);
@@ -389,9 +389,10 @@ router.post("/invoices/:id/return", async (req, res) => {
   const newStatus = totalReturnedQty >= allOriginalQty ? "returned" : "partial_return";
   await db.update(invoicesTable).set({ status: newStatus }).where(eq(invoicesTable.id, inv.id));
 
-  if (inv.accountId) {
+  const effectiveAccountId = overrideAccountId && overrideAccountId !== "none" ? Number(overrideAccountId) : inv.accountId;
+  if (effectiveAccountId) {
     await db.insert(accountTransactionsTable).values({
-      accountId: inv.accountId,
+      accountId: effectiveAccountId,
       direction: "out",
       amount: String(returnTotal),
       description: `مرتجع فاتورة رقم ${inv.invoiceNumber} (${returnNumber})`,

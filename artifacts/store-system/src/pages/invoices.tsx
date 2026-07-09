@@ -145,22 +145,27 @@ function EditInvoiceDialog({ invoiceId, onClose }: { invoiceId: number; onClose:
   );
 }
 
+type Account = { id: number; name: string; balance: number };
+
 function ReturnDialog({ invoiceId, onClose }: { invoiceId: number; onClose: () => void }) {
   const { data: invoice } = useGetInvoice(invoiceId);
+  const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ["accounts"], queryFn: () => fetchJSON(`${BASE}/accounts`) });
   const qc = useQueryClient();
   const { toast } = useToast();
   const [returnQty, setReturnQty] = useState<Record<number, string>>({});
   const [reason, setReason] = useState("");
+  const [returnAccountId, setReturnAccountId] = useState<string>("");
 
   const createReturn = useMutation({
     mutationFn: (data: object) => fetchJSON(`${BASE}/invoices/${invoiceId}/return`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
     }),
     onSuccess: () => {
-      toast({ title: "تم تسجيل المرتجع بنجاح", description: "تم إعادة المخزون تلقائياً" });
+      toast({ title: "تم تسجيل المرتجع بنجاح", description: "تم إعادة المخزون وتحديث الخزنة" });
       qc.invalidateQueries({ queryKey: getGetInvoicesQueryKey({}) });
       qc.invalidateQueries({ queryKey: ["invoice", invoiceId] });
       qc.invalidateQueries({ queryKey: ["invoice-returns", invoiceId] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
       onClose();
     },
     onError: async (err: any) => toast({ title: "خطأ في المرتجع", description: err?.message, variant: "destructive" }),
@@ -174,15 +179,17 @@ function ReturnDialog({ invoiceId, onClose }: { invoiceId: number; onClose: () =
       ?.filter(item => Number(returnQty[item.productId] ?? 0) > 0)
       .map(item => ({ productId: item.productId, quantity: Number(returnQty[item.productId] ?? 0) }));
     if (!items?.length) { toast({ title: "اختر كمية للإرجاع", variant: "destructive" }); return; }
-    createReturn.mutate({ reason, items });
+    const effectiveAccountId = returnAccountId || (invoice as any).accountId;
+    createReturn.mutate({ reason, items, accountId: effectiveAccountId ? Number(effectiveAccountId) : undefined });
   };
 
   const totalReturn = invoice.items?.reduce((s, item) => s + (Number(returnQty[item.productId] ?? 0) * item.unitPrice), 0) ?? 0;
+  const invoiceAccountId = String((invoice as any).accountId ?? "");
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-2">
       <div className="text-sm text-muted-foreground bg-orange-50 border border-orange-200 rounded p-3">
-        اختر الأصناف والكميات المراد إرجاعها — سيتم إعادة المخزون تلقائياً
+        اختر الأصناف والكميات المراد إرجاعها — سيتم إعادة المخزون وتحديث الخزنة تلقائياً
       </div>
       <Table>
         <TableHeader>
@@ -219,9 +226,27 @@ function ReturnDialog({ invoiceId, onClose }: { invoiceId: number; onClose: () =
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label>سبب الإرجاع</Label>
-        <Textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="مثال: منتج معيب، العميل غير راضٍ..." rows={2} />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>الخصم من الخزنة</Label>
+          <Select value={returnAccountId || invoiceAccountId} onValueChange={setReturnAccountId}>
+            <SelectTrigger>
+              <SelectValue placeholder="بدون خصم من الخزنة" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">بدون خصم من الخزنة</SelectItem>
+              {accounts.map(a => (
+                <SelectItem key={a.id} value={String(a.id)}>
+                  {a.name} — {Number(a.balance).toFixed(2)} ج.م
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>سبب الإرجاع</Label>
+          <Textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="منتج معيب، العميل غير راضٍ..." rows={1} />
+        </div>
       </div>
 
       <div className="flex justify-end gap-2">
