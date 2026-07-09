@@ -62,6 +62,7 @@ const financeItems = [
   { title: "سندات الصرف", url: "/payment-vouchers", icon: ArrowUpCircle },
   { title: "المصروفات", url: "/expenses", icon: CreditCard },
   { title: "سجل الضريبة", url: "/tax-ledger", icon: Receipt },
+  { title: "المنتجات الضريبية", url: "/taxable-products", icon: Receipt },
 ];
 
 const inventoryItems = [

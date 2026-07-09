@@ -30,6 +30,7 @@ import WhatsAppBroadcast from "@/pages/whatsapp-broadcast";
 import Warehouses from "@/pages/warehouses";
 import ProductTracking from "@/pages/product-tracking";
 import TaxLedger from "@/pages/tax-ledger";
+import TaxableProducts from "@/pages/taxable-products";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ function Router() {
       <Route path="/warehouses"><ProtectedRoute component={Warehouses} /></Route>
       <Route path="/product-tracking"><ProtectedRoute component={ProductTracking} /></Route>
       <Route path="/tax-ledger"><ProtectedRoute component={TaxLedger} /></Route>
+      <Route path="/taxable-products"><ProtectedRoute component={TaxableProducts} /></Route>
       <Route component={NotFound} />
     </Switch>
   );
