@@ -43,6 +43,27 @@ const TEMPLATE_SAMPLE = [
   ["سويتش 8 بورت", 800, 550, "أجهزة شبكات", "SW008", 5, 1, "قطعة"],
 ];
 
+function exportProducts(products: Product[]) {
+  const rows = [
+    TEMPLATE_COLUMNS,
+    ...products.map(p => [
+      p.name,
+      p.price,
+      p.costPrice ?? "",
+      p.categoryName ?? "",
+      p.barcode ?? "",
+      p.stock,
+      p.minStock ?? "",
+      p.unit ?? "قطعة",
+    ]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 10 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "المنتجات");
+  XLSX.writeFile(wb, `products_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_COLUMNS, ...TEMPLATE_SAMPLE]);
   ws["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 10 }];
@@ -205,9 +226,13 @@ export default function Products() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">المنتجات</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={downloadTemplate} title="تحميل نموذج Excel">
+          <Button variant="outline" onClick={() => exportProducts(filteredProducts)} title="تصدير المنتجات إلى Excel">
             <Download className="h-4 w-4 ml-2" />
-            نموذج Excel
+            تصدير Excel
+          </Button>
+          <Button variant="outline" onClick={downloadTemplate} title="تحميل نموذج Excel" className="text-muted-foreground">
+            <Download className="h-4 w-4 ml-2" />
+            نموذج فارغ
           </Button>
           <Button variant="outline" onClick={handleOpenImport}>
             <Upload className="h-4 w-4 ml-2" />
