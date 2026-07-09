@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, productsTable, categoriesTable, invoiceItemsTable, invoicesTable, purchaseItemsTable, purchasesTable, customersTable } from "@workspace/db";
+import { db, productsTable, categoriesTable, invoiceItemsTable, invoicesTable, purchaseItemsTable, purchasesTable, customersTable, invoiceReturnItemsTable, warehouseStockTable, warehouseTransferItemsTable } from "@workspace/db";
 import { eq, and, ilike, lte, sql, or } from "drizzle-orm";
 
 const router = Router();
@@ -130,6 +130,17 @@ router.patch("/products/:id", async (req, res) => {
   if (!p) return res.status(404).json({ error: "Not found" });
   const cats = await db.select().from(categoriesTable).where(eq(categoriesTable.id, p.categoryId)).limit(1);
   return res.json(formatProduct(p, cats[0]?.name));
+});
+
+router.post("/products/delete-all", async (req, res) => {
+  await db.delete(invoiceReturnItemsTable);
+  await db.delete(invoiceItemsTable);
+  await db.delete(purchaseItemsTable);
+  await db.delete(warehouseStockTable);
+  await db.delete(warehouseTransferItemsTable);
+  await db.delete(productsTable);
+  await db.delete(categoriesTable);
+  return res.json({ ok: true });
 });
 
 router.post("/products/bulk-delete", async (req, res) => {

@@ -296,6 +296,23 @@ export default function Products() {
     exportProducts(toExport);
   };
 
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState("");
+
+  const handleDeleteAll = async () => {
+    try {
+      await fetch("/api/products/delete-all", { method: "POST", credentials: "include" });
+      toast({ title: "تم مسح جميع المنتجات والأقسام" });
+      setSelectedIds(new Set());
+      setIsDeleteAllOpen(false);
+      setDeleteAllConfirm("");
+      queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    } catch {
+      toast({ title: "خطأ أثناء المسح", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -316,6 +333,10 @@ export default function Products() {
           <Button onClick={() => handleOpenDialog()}>
             <Plus className="h-4 w-4 ml-2" />
             إضافة منتج
+          </Button>
+          <Button variant="destructive" onClick={() => setIsDeleteAllOpen(true)}>
+            <Trash2 className="h-4 w-4 ml-2" />
+            مسح الكل
           </Button>
         </div>
       </div>
@@ -684,6 +705,38 @@ export default function Products() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Delete All Confirmation Dialog ─── */}
+      <Dialog open={isDeleteAllOpen} onOpenChange={v => { setIsDeleteAllOpen(v); setDeleteAllConfirm(""); }}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">⚠️ مسح جميع المنتجات والأقسام</DialogTitle>
+            <DialogDescription className="text-right space-y-2 pt-1">
+              <span className="block">سيتم حذف <strong>كل المنتجات</strong> و<strong>كل الأقسام</strong> نهائياً.</span>
+              <span className="block text-destructive font-medium">هذا الإجراء لا يمكن التراجع عنه.</span>
+              <span className="block mt-2">اكتب <strong>تأكيد</strong> للمتابعة:</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              value={deleteAllConfirm}
+              onChange={e => setDeleteAllConfirm(e.target.value)}
+              placeholder='اكتب "تأكيد" هنا'
+              className="text-center font-bold"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => { setIsDeleteAllOpen(false); setDeleteAllConfirm(""); }}>إلغاء</Button>
+              <Button
+                variant="destructive"
+                disabled={deleteAllConfirm !== "تأكيد"}
+                onClick={handleDeleteAll}
+              >
+                مسح الكل نهائياً
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
