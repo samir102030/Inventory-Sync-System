@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, categoriesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, categoriesTable, productsTable, invoiceReturnItemsTable, invoiceItemsTable, purchaseItemsTable, warehouseStockTable, warehouseTransferItemsTable } from "@workspace/db";
+import { eq, inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -28,7 +28,18 @@ router.patch("/categories/:id", async (req, res) => {
 });
 
 router.delete("/categories/:id", async (req, res) => {
-  await db.delete(categoriesTable).where(eq(categoriesTable.id, Number(req.params.id)));
+  const catId = Number(req.params.id);
+  const products = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.categoryId, catId));
+  if (products.length > 0) {
+    const productIds = products.map(p => p.id);
+    await db.delete(invoiceReturnItemsTable);
+    await db.delete(invoiceItemsTable).where(inArray(invoiceItemsTable.productId, productIds));
+    await db.delete(purchaseItemsTable).where(inArray(purchaseItemsTable.productId, productIds));
+    await db.delete(warehouseStockTable).where(inArray(warehouseStockTable.productId, productIds));
+    await db.delete(warehouseTransferItemsTable).where(inArray(warehouseTransferItemsTable.productId, productIds));
+    await db.delete(productsTable).where(eq(productsTable.categoryId, catId));
+  }
+  await db.delete(categoriesTable).where(eq(categoriesTable.id, catId));
   return res.json({ ok: true });
 });
 
