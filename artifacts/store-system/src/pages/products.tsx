@@ -267,14 +267,28 @@ export default function Products() {
     }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`هل أنت متأكد من حذف ${selectedIds.size} منتج؟`)) return;
-    Promise.all([...selectedIds].map(id => deleteProduct.mutateAsync({ id }))).then(() => {
-      toast({ title: `تم حذف ${selectedIds.size} منتج` });
-      setSelectedIds(new Set());
+    try {
+      const res = await fetch("/api/products/bulk-delete", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const { deleted, failed } = await res.json() as { deleted: number[]; failed: { id: number; name: string; reason: string }[] };
       queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() });
-    });
+      setSelectedIds(new Set());
+      if (failed.length === 0) {
+        toast({ title: `تم حذف ${deleted.length} منتج بنجاح` });
+      } else if (deleted.length === 0) {
+        toast({ title: `لم يُحذف أي منتج`, description: `${failed.length} منتج مرتبط بفواتير أو مشتريات لا يمكن حذفه`, variant: "destructive" });
+      } else {
+        toast({ title: `تم حذف ${deleted.length} منتج`, description: `تعذّر حذف ${failed.length} منتج: ${failed.map(f => f.name).join("، ")} (مرتبط بفواتير)` });
+      }
+    } catch {
+      toast({ title: "خطأ أثناء الحذف", variant: "destructive" });
+    }
   };
 
   const handleExportSelected = () => {

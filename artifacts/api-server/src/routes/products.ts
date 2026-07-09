@@ -132,6 +132,28 @@ router.patch("/products/:id", async (req, res) => {
   return res.json(formatProduct(p, cats[0]?.name));
 });
 
+router.post("/products/bulk-delete", async (req, res) => {
+  const { ids } = req.body as { ids: number[] };
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
+  const deleted: number[] = [];
+  const failed: { id: number; name: string; reason: string }[] = [];
+  for (const id of ids) {
+    try {
+      const [product] = await db.select({ id: productsTable.id, name: productsTable.name }).from(productsTable).where(eq(productsTable.id, id)).limit(1);
+      if (!product) continue;
+      await db.delete(productsTable).where(eq(productsTable.id, id));
+      deleted.push(id);
+    } catch (err: any) {
+      const [product] = await db.select({ name: productsTable.name }).from(productsTable).where(eq(productsTable.id, id)).limit(1);
+      const name = product?.name ?? `#${id}`;
+      const msg = String(err?.message ?? "");
+      const reason = msg.includes("foreign key") || msg.includes("violates") ? "مرتبط بفاتورة أو مشترى" : "خطأ غير متوقع";
+      failed.push({ id, name, reason });
+    }
+  }
+  return res.json({ deleted, failed });
+});
+
 router.delete("/products/:id", async (req, res) => {
   await db.delete(productsTable).where(eq(productsTable.id, Number(req.params.id)));
   return res.json({ ok: true });
