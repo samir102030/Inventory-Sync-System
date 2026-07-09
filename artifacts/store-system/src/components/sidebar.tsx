@@ -20,6 +20,7 @@ import {
   Warehouse,
   ScanBarcode,
   Receipt,
+  UserCheck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -61,6 +62,7 @@ const financeItems = [
   { title: "سندات القبض", url: "/receipt-vouchers", icon: ArrowDownCircle },
   { title: "سندات الصرف", url: "/payment-vouchers", icon: ArrowUpCircle },
   { title: "المصروفات", url: "/expenses", icon: CreditCard },
+  { title: "الموظفون والرواتب", url: "/employees", icon: UserCheck },
   { title: "سجل الضريبة", url: "/tax-ledger", icon: Receipt },
   { title: "المنتجات الضريبية", url: "/taxable-products", icon: Receipt },
 ];
