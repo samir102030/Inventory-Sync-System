@@ -163,14 +163,17 @@ export default function TaxableProducts() {
                   <TableHead>القسم</TableHead>
                   <TableHead>المخزون</TableHead>
                   <TableHead className="text-left">سعر التكلفة</TableHead>
+                  <TableHead className="text-left text-amber-700">تكلفة القطعة + ضريبة {taxRate}%</TableHead>
                   <TableHead className="text-left">سعر البيع</TableHead>
                   <TableHead className="text-left text-amber-700">قيمة الضريبة ({taxRate}%)</TableHead>
-                  <TableHead className="text-left text-green-700">السعر شامل الضريبة</TableHead>
+                  <TableHead className="text-left text-green-700">سعر البيع شامل الضريبة</TableHead>
                   <TableHead className="text-left text-blue-700">قيمة المخزون (شامل الضريبة)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map(p => {
+                  const costTaxAmt = p.costPrice != null ? p.costPrice * (taxRate / 100) : null;
+                  const costWithTax = p.costPrice != null ? p.costPrice + (costTaxAmt ?? 0) : null;
                   const taxAmt = p.price * (taxRate / 100);
                   const priceWithTax = p.price + taxAmt;
                   const stockValue = priceWithTax * p.stock;
@@ -197,6 +200,9 @@ export default function TaxableProducts() {
                       </TableCell>
                       <TableCell className="text-left" dir="ltr">
                         {p.costPrice != null ? fmt(p.costPrice) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-left font-bold text-amber-700" dir="ltr">
+                        {costWithTax != null ? fmt(costWithTax) : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="text-left font-medium" dir="ltr">
                         {fmt(p.price)}

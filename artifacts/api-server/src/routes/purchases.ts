@@ -12,15 +12,18 @@ router.get("/purchases", async (_req, res) => {
       supplierId: purchasesTable.supplierId,
       supplierName: purchasesTable.supplierName,
       total: purchasesTable.total,
+      tax: purchasesTable.tax,
+      taxRate: purchasesTable.taxRate,
       date: purchasesTable.date,
       paymentMethod: purchasesTable.paymentMethod,
       accountId: purchasesTable.accountId,
       notes: purchasesTable.notes,
+      isTaxable: purchasesTable.isTaxable,
       createdAt: purchasesTable.createdAt,
     })
     .from(purchasesTable)
     .orderBy(sql`${purchasesTable.createdAt} DESC`);
-  return res.json(rows.map(r => ({ ...r, total: Number(r.total), createdAt: r.createdAt.toISOString() })));
+  return res.json(rows.map(r => ({ ...r, total: Number(r.total), tax: Number(r.tax), taxRate: Number(r.taxRate), createdAt: r.createdAt.toISOString() })));
 });
 
 router.get("/purchases/:id", async (req, res) => {
@@ -30,6 +33,8 @@ router.get("/purchases/:id", async (req, res) => {
   return res.json({
     ...p,
     total: Number(p.total),
+    tax: Number(p.tax),
+    taxRate: Number(p.taxRate),
     createdAt: p.createdAt.toISOString(),
     items: items.map(i => ({
       ...i,
@@ -41,12 +46,15 @@ router.get("/purchases/:id", async (req, res) => {
 });
 
 router.post("/purchases", async (req, res) => {
-  const { supplierId, supplierName, date, notes, items, paymentMethod, accountId, isTaxable } = req.body;
+  const { supplierId, supplierName, date, notes, items, paymentMethod, accountId, isTaxable, taxRate } = req.body;
   if (!date || !items?.length) return res.status(400).json({ error: "date and items required" });
   if (paymentMethod === "credit" && !supplierId) return res.status(400).json({ error: "supplierId is required for credit purchases" });
 
-  const total = (items as Array<{ quantity: number; unitCost: number }>)
+  const rate = Number(taxRate ?? 0);
+  const subtotal = (items as Array<{ quantity: number; unitCost: number }>)
     .reduce((s, i) => s + i.quantity * i.unitCost, 0);
+  const taxAmt = subtotal * (rate / 100);
+  const total = subtotal + taxAmt;
 
   const [{ cnt }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(purchasesTable);
   const purchaseNumber = `PUR-${String(Number(cnt) + 1).padStart(4, "0")}`;
@@ -56,14 +64,15 @@ router.post("/purchases", async (req, res) => {
     : (supplierName ?? null);
 
   const method = paymentMethod === "credit" ? "credit" : "cash";
-
-  const taxable = isTaxable ? 1 : 0;
+  const taxable = (isTaxable || rate > 0) ? 1 : 0;
 
   const [purchase] = await db.insert(purchasesTable).values({
     purchaseNumber,
     supplierId: supplierId ?? null,
     supplierName: supplierLabel,
     total: String(total),
+    tax: String(taxAmt),
+    taxRate: String(rate),
     date,
     paymentMethod: method,
     accountId: accountId ? Number(accountId) : null,
@@ -73,7 +82,7 @@ router.post("/purchases", async (req, res) => {
 
   for (const item of items as Array<{ productId: number; productName: string; barcode?: string; quantity: number; unitCost: number }>) {
     const itemTotal = item.quantity * item.unitCost;
-    // fetch barcode if not provided
+    const unitCostWithTax = item.unitCost * (1 + rate / 100);
     let barcode = item.barcode ?? null;
     if (!barcode) {
       const [prod] = await db.select({ barcode: productsTable.barcode }).from(productsTable).where(eq(productsTable.id, item.productId)).limit(1);
@@ -91,7 +100,7 @@ router.post("/purchases", async (req, res) => {
     if (taxable) {
       await db
         .update(productsTable)
-        .set({ taxStock: sql`${productsTable.taxStock} + ${item.quantity}`, costPrice: String(item.unitCost) })
+        .set({ taxStock: sql`${productsTable.taxStock} + ${item.quantity}`, costPrice: String(unitCostWithTax) })
         .where(eq(productsTable.id, item.productId));
     } else {
       await db
@@ -106,14 +115,14 @@ router.post("/purchases", async (req, res) => {
       accountId: purchase.accountId,
       direction: "out",
       amount: String(total),
-      description: `فاتورة مشتريات رقم ${purchaseNumber}${supplierLabel ? ` — ${supplierLabel}` : ""}`,
+      description: `فاتورة مشتريات رقم ${purchaseNumber}${supplierLabel ? ` — ${supplierLabel}` : ""}${rate > 0 ? ` (شامل ضريبة ${rate}%)` : ""}`,
       category: "مشتريات",
       date,
       reference: `purchase:${purchase.id}`,
     });
   }
 
-  return res.status(201).json({ ...purchase, total: Number(purchase.total), createdAt: purchase.createdAt.toISOString() });
+  return res.status(201).json({ ...purchase, total: Number(purchase.total), tax: Number(purchase.tax), taxRate: Number(purchase.taxRate), createdAt: purchase.createdAt.toISOString() });
 });
 
 router.delete("/purchases/:id", async (req, res) => {

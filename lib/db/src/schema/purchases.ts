@@ -14,6 +14,8 @@ export const purchasesTable = pgTable("purchases", {
   accountId: integer("account_id").references(() => accountsTable.id),
   notes: text("notes"),
   isTaxable: integer("is_taxable").notNull().default(0),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+  tax: numeric("tax", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

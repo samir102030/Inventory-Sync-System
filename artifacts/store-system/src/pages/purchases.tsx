@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Eye } from "lucide-react";
+import { Plus, Trash2, Eye, Receipt } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,7 @@ type Supplier = { id: number; name: string };
 type Product = { id: number; name: string; costPrice?: number };
 type Account = { id: number; name: string };
 type PurchaseItem = { productId: number; productName: string; quantity: number; unitCost: number; total: number };
-type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; date: string; paymentMethod?: string; accountId?: number | null; notes?: string | null; isTaxable?: number; createdAt: string };
+type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; tax: number; taxRate: number; date: string; paymentMethod?: string; accountId?: number | null; notes?: string | null; isTaxable?: number; createdAt: string };
 
 const BASE = "/api";
 const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
@@ -35,6 +35,7 @@ export default function Purchases() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "credit">("cash");
   const [accountId, setAccountId] = useState<string>("");
   const [isTaxable, setIsTaxable] = useState(false);
+  const [taxRate, setTaxRate] = useState<number>(0);
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -55,7 +56,7 @@ export default function Purchases() {
     onSuccess: () => { toast({ title: "تم حذف الطلب" }); qc.invalidateQueries({ queryKey: ["purchases"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); },
   });
 
-  const resetForm = () => { setSupplierId(""); setSupplierName(""); setDate(format(new Date(), "yyyy-MM-dd")); setNotes(""); setItems([]); setSelectedProductId(""); setItemQty("1"); setItemCost(""); setPaymentMethod("cash"); setAccountId(accounts[0] ? String(accounts[0].id) : ""); setIsTaxable(false); };
+  const resetForm = () => { setSupplierId(""); setSupplierName(""); setDate(format(new Date(), "yyyy-MM-dd")); setNotes(""); setItems([]); setSelectedProductId(""); setItemQty("1"); setItemCost(""); setPaymentMethod("cash"); setAccountId(accounts[0] ? String(accounts[0].id) : ""); setIsTaxable(false); setTaxRate(0); };
 
   const addItem = () => {
     if (!selectedProductId || !itemQty || !itemCost) return;
@@ -89,6 +90,7 @@ export default function Purchases() {
       paymentMethod,
       accountId: paymentMethod === "cash" ? Number(accountId) : undefined,
       isTaxable,
+      taxRate,
     });
   };
 
@@ -97,7 +99,9 @@ export default function Purchases() {
     setViewPurchase(data);
   };
 
-  const totalAmount = items.reduce((s, i) => s + i.total, 0);
+  const subtotalAmount = items.reduce((s, i) => s + i.total, 0);
+  const taxAmount = subtotalAmount * (taxRate / 100);
+  const totalAmount = subtotalAmount + taxAmount;
 
   return (
     <div className="space-y-6">
@@ -206,16 +210,33 @@ export default function Purchases() {
               )}
             </div>
 
-            <div className="flex items-center gap-3 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3">
-              <Checkbox
-                id="isTaxable"
-                checked={isTaxable}
-                onCheckedChange={(v) => setIsTaxable(!!v)}
-              />
-              <div>
-                <Label htmlFor="isTaxable" className="cursor-pointer font-semibold text-purple-800">مشتريات ضريبية (VAT)</Label>
-                <p className="text-xs text-purple-600">عند التفعيل، ستُضاف الكميات إلى المخزن الضريبي المنفصل بدلاً من المخزن العادي</p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
+              <div className="flex items-center gap-3">
+                <Receipt className="h-4 w-4 text-amber-600" />
+                <span className="font-semibold text-amber-800">نسبة الضريبة على الفاتورة</span>
               </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Select value={taxRate.toString()} onValueChange={v => { setTaxRate(Number(v)); setIsTaxable(Number(v) > 0); }}>
+                  <SelectTrigger className="w-56 bg-white border-amber-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">بدون ضريبة</SelectItem>
+                    <SelectItem value="5">ضريبة 5%</SelectItem>
+                    <SelectItem value="10">ضريبة 10%</SelectItem>
+                    <SelectItem value="14">ضريبة القيمة المضافة 14%</SelectItem>
+                  </SelectContent>
+                </Select>
+                {taxRate > 0 && items.length > 0 && (
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-muted-foreground">قبل الضريبة: <strong>{subtotalAmount.toFixed(2)} ج.م</strong></span>
+                    <span className="text-amber-700">الضريبة ({taxRate}%): <strong>{taxAmount.toFixed(2)} ج.م</strong></span>
+                  </div>
+                )}
+              </div>
+              {taxRate > 0 && (
+                <p className="text-xs text-amber-600">سيُحفظ سعر التكلفة للمنتجات شاملاً الضريبة تلقائياً</p>
+              )}
             </div>
 
             <Card>
@@ -248,7 +269,14 @@ export default function Purchases() {
                       <TableCell><Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-3 w-3" /></Button></TableCell>
                     </TableRow>
                   ))}
-                  <TableRow><TableCell colSpan={3} className="text-left font-bold">الإجمالي</TableCell><TableCell className="font-bold text-blue-600">{totalAmount.toFixed(2)} ج.م</TableCell><TableCell /></TableRow>
+                  {taxRate > 0 && (
+                    <TableRow className="bg-amber-50">
+                      <TableCell colSpan={3} className="text-left text-amber-700">ضريبة {taxRate}%</TableCell>
+                      <TableCell className="font-semibold text-amber-700">{taxAmount.toFixed(2)} ج.م</TableCell>
+                      <TableCell />
+                    </TableRow>
+                  )}
+                  <TableRow className="bg-blue-50"><TableCell colSpan={3} className="text-left font-bold">الإجمالي شامل الضريبة</TableCell><TableCell className="font-bold text-blue-600">{totalAmount.toFixed(2)} ج.م</TableCell><TableCell /></TableRow>
                 </TableBody>
               </Table>
             )}
@@ -281,7 +309,13 @@ export default function Purchases() {
                       <TableCell className="font-bold">{item.total.toFixed(2)} ج.م</TableCell>
                     </TableRow>
                   ))}
-                  <TableRow><TableCell colSpan={3} className="font-bold">الإجمالي</TableCell><TableCell className="font-bold text-blue-600">{viewPurchase.total.toFixed(2)} ج.م</TableCell></TableRow>
+                  {viewPurchase.taxRate > 0 && (
+                    <TableRow className="bg-amber-50">
+                      <TableCell colSpan={3} className="text-amber-700">ضريبة {viewPurchase.taxRate}%</TableCell>
+                      <TableCell className="font-semibold text-amber-700">{viewPurchase.tax?.toFixed(2)} ج.م</TableCell>
+                    </TableRow>
+                  )}
+                  <TableRow><TableCell colSpan={3} className="font-bold">الإجمالي شامل الضريبة</TableCell><TableCell className="font-bold text-blue-600">{viewPurchase.total.toFixed(2)} ج.م</TableCell></TableRow>
                 </TableBody>
               </Table>
             </div>
