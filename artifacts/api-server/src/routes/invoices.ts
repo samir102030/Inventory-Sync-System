@@ -39,6 +39,49 @@ async function generateReturnNumber(invoiceNumber: string) {
   return `RET-${num}`;
 }
 
+router.get("/invoices/tax-ledger", async (req, res) => {
+  const { from, to } = req.query;
+  const conditions = [sql`${invoicesTable.tax}::numeric > 0`];
+  if (from) conditions.push(gte(sql`${invoicesTable.createdAt}::date`, sql`${String(from)}::date`));
+  if (to) conditions.push(lte(sql`${invoicesTable.createdAt}::date`, sql`${String(to)}::date`));
+
+  const rows = await db
+    .select({
+      id: invoicesTable.id,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      customerName: customersTable.name,
+      subtotal: invoicesTable.subtotal,
+      discount: invoicesTable.discount,
+      tax: invoicesTable.tax,
+      total: invoicesTable.total,
+      paymentMethod: invoicesTable.paymentMethod,
+      createdAt: invoicesTable.createdAt,
+    })
+    .from(invoicesTable)
+    .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+    .where(and(...conditions))
+    .orderBy(sql`${invoicesTable.createdAt} DESC`);
+
+  const invoices = rows.map(r => ({
+    id: r.id,
+    invoiceNumber: r.invoiceNumber,
+    customerName: r.customerName ?? null,
+    subtotal: Number(r.subtotal),
+    discount: Number(r.discount),
+    tax: Number(r.tax),
+    total: Number(r.total),
+    paymentMethod: r.paymentMethod,
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    taxRate: Number(r.subtotal) > 0 ? Math.round((Number(r.tax) / Number(r.subtotal)) * 100) : 0,
+  }));
+
+  const totalTax = invoices.reduce((s, r) => s + r.tax, 0);
+  const totalSubtotal = invoices.reduce((s, r) => s + r.subtotal, 0);
+  const totalAmount = invoices.reduce((s, r) => s + r.total, 0);
+
+  return res.json({ invoices, totalTax, totalSubtotal, totalAmount, count: invoices.length });
+});
+
 router.get("/invoices", async (req, res) => {
   const { startDate, endDate, customerId, status } = req.query;
   const conditions = [];

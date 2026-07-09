@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle, Wallet } from "lucide-react";
+import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle, Wallet, Receipt } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
@@ -331,13 +331,28 @@ export default function POS() {
             </Select>
           </div>
 
+          <div className="flex items-center gap-2">
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+            <Select value={taxRate.toString()} onValueChange={(v) => setTaxRate(Number(v))}>
+              <SelectTrigger className="w-full bg-background">
+                <SelectValue placeholder="الضريبة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">بدون ضريبة</SelectItem>
+                <SelectItem value="5">ضريبة 5%</SelectItem>
+                <SelectItem value="10">ضريبة 10%</SelectItem>
+                <SelectItem value="14">ضريبة القيمة المضافة 14%</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2 pt-2">
             <div className="flex justify-between text-sm">
               <span>المجموع الفرعي:</span>
               <span>{subtotal.toFixed(2)} ج.م</span>
             </div>
             {taxRate > 0 && (
-              <div className="flex justify-between text-sm text-muted-foreground">
+              <div className="flex justify-between text-sm text-amber-600 font-medium">
                 <span>الضريبة ({taxRate}%):</span>
                 <span>{taxAmount.toFixed(2)} ج.م</span>
               </div>
