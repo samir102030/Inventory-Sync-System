@@ -459,7 +459,7 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
   <div class="sep"></div>
 
   <div class="total-row"><span>فاتورة #</span><span class="bold">${invoice.invoiceNumber}</span></div>
-  <div class="total-row"><span>التاريخ</span><span>${new Date(invoice.createdAt).toLocaleDateString('ar-EG')} ${new Date(invoice.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span></div>
+  <div class="total-row"><span>التاريخ</span><span dir="ltr">${new Date(invoice.createdAt).toLocaleDateString('en-GB')} ${new Date(invoice.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span></div>
   <div class="total-row"><span>العميل</span><span>${invoice.customerName || "نقدي"}</span></div>
   <div class="total-row"><span>الدفع</span><span>${getPaymentLabel(invoice.paymentMethod || "")}</span></div>
   <div class="sep"></div>
