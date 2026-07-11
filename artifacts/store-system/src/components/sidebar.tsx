@@ -21,6 +21,7 @@ import {
   ScanBarcode,
   Receipt,
   UserCheck,
+  ClipboardList,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -49,6 +50,7 @@ const salesItems = [
   { title: "الرئيسية", url: "/dashboard", icon: Home },
   { title: "نقطة البيع", url: "/pos", icon: ShoppingCart },
   { title: "الفواتير", url: "/invoices", icon: FileText },
+  { title: "عروض الأسعار", url: "/quotations", icon: ClipboardList },
 ];
 
 const purchaseItems = [

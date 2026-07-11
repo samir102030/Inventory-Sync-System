@@ -32,6 +32,7 @@ import ProductTracking from "@/pages/product-tracking";
 import TaxLedger from "@/pages/tax-ledger";
 import TaxableProducts from "@/pages/taxable-products";
 import Employees from "@/pages/employees";
+import Quotations from "@/pages/quotations";
 
 const queryClient = new QueryClient();
 
@@ -85,6 +86,7 @@ function Router() {
       <Route path="/tax-ledger"><ProtectedRoute component={TaxLedger} /></Route>
       <Route path="/taxable-products"><ProtectedRoute component={TaxableProducts} /></Route>
       <Route path="/employees"><ProtectedRoute component={Employees} /></Route>
+      <Route path="/quotations"><ProtectedRoute component={Quotations} /></Route>
       <Route component={NotFound} />
     </Switch>
   );
