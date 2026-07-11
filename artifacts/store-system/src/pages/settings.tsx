@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   useGetInvoiceSettings, 
   useUpdateInvoiceSettings,
@@ -19,7 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Check, X } from "lucide-react";
+import { Plus, Edit, Trash2, Check, X, Upload, Trash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { User, UserInputRole } from "@workspace/api-client-react/src/generated/api.schemas";
 
@@ -289,13 +289,17 @@ export default function Settings() {
   const { data: user } = useGetMe();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     companyName: "",
     companyPhone: "",
     companyAddress: "",
+    companyEmail: "",
+    footerNote: "",
     taxRate: "",
     invoicePrefix: "",
+    companyLogo: "",
   });
 
   useEffect(() => {
@@ -304,11 +308,28 @@ export default function Settings() {
         companyName: settings.companyName,
         companyPhone: settings.companyPhone || "",
         companyAddress: settings.companyAddress || "",
+        companyEmail: (settings as any).companyEmail || "",
+        footerNote: (settings as any).footerNote || "",
         taxRate: settings.taxRate?.toString() || "0",
         invoicePrefix: settings.invoicePrefix || "INV-",
+        companyLogo: (settings as any).companyLogo || "",
       });
     }
   }, [settings]);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) {
+      toast({ title: "حجم الصورة كبير جداً", description: "يجب أن يكون أقل من 500 كيلوبايت", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setFormData(f => ({ ...f, companyLogo: ev.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSaveSettings = () => {
     updateSettings.mutate({
@@ -316,9 +337,12 @@ export default function Settings() {
         companyName: formData.companyName,
         companyPhone: formData.companyPhone,
         companyAddress: formData.companyAddress,
+        companyEmail: formData.companyEmail,
+        footerNote: formData.footerNote,
         taxRate: parseFloat(formData.taxRate),
         invoicePrefix: formData.invoicePrefix,
-      }
+        companyLogo: formData.companyLogo,
+      } as any
     }, {
       onSuccess: () => {
         toast({ title: "تم حفظ الإعدادات" });
@@ -334,13 +358,44 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <CardTitle>إعدادات الفاتورة والشركة</CardTitle>
-          <CardDescription>هذه المعلومات ستظهر في طباعة الفواتير</CardDescription>
+          <CardDescription>هذه المعلومات ستظهر في طباعة الفواتير والـ PDF</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {settingsLoading ? (
             <div className="text-muted-foreground">جاري التحميل...</div>
           ) : (
             <>
+              {/* Logo Upload */}
+              <div className="space-y-2">
+                <Label>شعار الشركة (Logo)</Label>
+                <div className="flex items-center gap-4">
+                  {formData.companyLogo ? (
+                    <div className="relative group">
+                      <img src={formData.companyLogo} alt="logo" className="h-20 max-w-[200px] object-contain border rounded-lg p-2 bg-gray-50" />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(f => ({ ...f, companyLogo: "" }))}
+                        className="absolute -top-2 -left-2 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-20 w-40 border-2 border-dashed border-muted-foreground/30 rounded-lg flex items-center justify-center text-muted-foreground text-xs text-center">
+                      لا يوجد شعار
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                      <Upload className="h-4 w-4 ml-1" />
+                      {formData.companyLogo ? "تغيير الشعار" : "رفع شعار"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">PNG أو JPG — أقل من 500 KB</p>
+                    <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">اسم الشركة</Label>
@@ -348,12 +403,22 @@ export default function Settings() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyPhone">رقم الهاتف</Label>
-                  <Input id="companyPhone" value={formData.companyPhone} onChange={e => setFormData({...formData, companyPhone: e.target.value})} />
+                  <Input id="companyPhone" value={formData.companyPhone} onChange={e => setFormData({...formData, companyPhone: e.target.value})} dir="ltr" className="text-right" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="companyAddress">العنوان</Label>
+                  <Input id="companyAddress" value={formData.companyAddress} onChange={e => setFormData({...formData, companyAddress: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="companyEmail">البريد الإلكتروني</Label>
+                  <Input id="companyEmail" type="email" value={formData.companyEmail} onChange={e => setFormData({...formData, companyEmail: e.target.value})} dir="ltr" className="text-right" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="companyAddress">العنوان</Label>
-                <Input id="companyAddress" value={formData.companyAddress} onChange={e => setFormData({...formData, companyAddress: e.target.value})} />
+                <Label htmlFor="footerNote">نص ذيل الفاتورة</Label>
+                <Input id="footerNote" value={formData.footerNote} onChange={e => setFormData({...formData, footerNote: e.target.value})} placeholder="شكراً لتعاملكم معنا" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

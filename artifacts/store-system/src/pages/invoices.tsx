@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useGetInvoices, useGetInvoice, getGetInvoicesQueryKey } from "@workspace/api-client-react";
+import { useGetInvoices, useGetInvoice, useGetInvoiceSettings, getGetInvoicesQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -260,8 +260,150 @@ function ReturnDialog({ invoiceId, onClose }: { invoiceId: number; onClose: () =
   );
 }
 
+function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
+  const companyName = settings?.companyName || "شركتي";
+  const companyPhone = settings?.companyPhone || "";
+  const companyAddress = settings?.companyAddress || "";
+  const companyEmail = settings?.companyEmail || "";
+  const companyLogo = settings?.companyLogo || "";
+  const footerNote = settings?.footerNote || "";
+  const primaryColor = settings?.primaryColor || "#1e40af";
+
+  const itemRows = (invoice.items || []).map((item: any) => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">${item.productName}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${item.quantity}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${Number(item.unitPrice).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:bold;">${(item.quantity * item.unitPrice).toFixed(2)}</td>
+    </tr>`).join("");
+
+  const returnRows = returns.map(ret => `
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px;margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;">
+        <span>${ret.returnNumber}</span><span style="color:#ea580c;">${Number(ret.total).toFixed(2)} ج.م</span>
+      </div>
+      <div style="font-size:11px;color:#666;margin-top:4px;">${new Date(ret.createdAt).toLocaleString('ar-EG')}${ret.reason ? ` — ${ret.reason}` : ''}</div>
+    </div>`).join("");
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8"/>
+<title>فاتورة #${invoice.invoiceNumber}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size:14px; color:#1a1a1a; background:#fff; direction:rtl; }
+  @page { size: A4; margin: 15mm 12mm; }
+  .page { max-width:780px; margin:0 auto; padding:20px; }
+  /* ===== COMPANY HEADER ===== */
+  .header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:16px; border-bottom:3px solid ${primaryColor}; margin-bottom:20px; }
+  .logo { max-height:80px; max-width:180px; object-fit:contain; }
+  .company-info { text-align:right; }
+  .company-name { font-size:22px; font-weight:700; color:${primaryColor}; }
+  .company-detail { font-size:12px; color:#555; margin-top:3px; }
+  /* ===== INVOICE META ===== */
+  .meta { display:flex; justify-content:space-between; background:#f8f9fa; border-radius:8px; padding:14px 18px; margin-bottom:20px; }
+  .meta-block h3 { font-size:11px; text-transform:uppercase; color:#888; letter-spacing:.5px; margin-bottom:4px; }
+  .meta-block p { font-weight:600; font-size:14px; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+  .badge-paid { background:#dcfce7; color:#166534; }
+  .badge-draft { background:#f3f4f6; color:#374151; }
+  .badge-cancelled { background:#fee2e2; color:#991b1b; }
+  .badge-returned { background:#fed7aa; color:#9a3412; }
+  /* ===== ITEMS TABLE ===== */
+  .items-table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+  .items-table thead { background:${primaryColor}; color:#fff; }
+  .items-table thead th { padding:10px 12px; text-align:right; font-size:13px; font-weight:600; }
+  .items-table thead th:not(:first-child) { text-align:center; }
+  .items-table tbody tr:nth-child(even) { background:#f9fafb; }
+  /* ===== TOTALS ===== */
+  .totals { display:flex; justify-content:flex-end; margin-bottom:16px; }
+  .totals-box { width:260px; }
+  .totals-row { display:flex; justify-content:space-between; padding:5px 0; font-size:13px; border-bottom:1px solid #f0f0f0; }
+  .totals-final { display:flex; justify-content:space-between; padding:8px 0 0; font-size:16px; font-weight:700; color:${primaryColor}; }
+  /* ===== FOOTER ===== */
+  .footer { margin-top:24px; padding-top:12px; border-top:1px solid #e5e7eb; text-align:center; font-size:11px; color:#888; }
+  @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- COMPANY HEADER -->
+  <div class="header">
+    <div class="company-info">
+      <div class="company-name">${companyName}</div>
+      ${companyPhone ? `<div class="company-detail">📞 ${companyPhone}</div>` : ""}
+      ${companyAddress ? `<div class="company-detail">📍 ${companyAddress}</div>` : ""}
+      ${companyEmail ? `<div class="company-detail">✉ ${companyEmail}</div>` : ""}
+    </div>
+    ${companyLogo ? `<img src="${companyLogo}" class="logo" alt="logo"/>` : `<div style="width:100px;height:60px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
+  </div>
+
+  <!-- INVOICE META -->
+  <div class="meta">
+    <div class="meta-block">
+      <h3>رقم الفاتورة</h3>
+      <p>${invoice.invoiceNumber}</p>
+    </div>
+    <div class="meta-block">
+      <h3>التاريخ</h3>
+      <p>${new Date(invoice.createdAt).toLocaleDateString('ar-EG')}</p>
+    </div>
+    <div class="meta-block">
+      <h3>العميل</h3>
+      <p>${invoice.customerName || "عميل نقدي"}</p>
+    </div>
+    <div class="meta-block">
+      <h3>طريقة الدفع</h3>
+      <p>${getPaymentLabel(invoice.paymentMethod || "")}</p>
+    </div>
+    <div class="meta-block">
+      <h3>الحالة</h3>
+      <span class="badge badge-${invoice.status}">${(({ paid:"مدفوعة", draft:"مسودة", cancelled:"ملغاة", returned:"مرتجعة", partial_return:"مرتجع جزئي" } as Record<string,string>)[invoice.status as string]) || invoice.status}</span>
+    </div>
+  </div>
+
+  <!-- ITEMS -->
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>المنتج</th>
+        <th style="text-align:center;">الكمية</th>
+        <th style="text-align:center;">سعر الوحدة (ج.م)</th>
+        <th style="text-align:center;">المجموع (ج.م)</th>
+      </tr>
+    </thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+
+  <!-- TOTALS -->
+  <div class="totals">
+    <div class="totals-box">
+      <div class="totals-row"><span>المجموع الفرعي</span><span>${Number(invoice.subtotal || 0).toFixed(2)} ج.م</span></div>
+      ${Number(invoice.discount) > 0 ? `<div class="totals-row" style="color:#dc2626;"><span>الخصم</span><span>-${Number(invoice.discount).toFixed(2)} ج.م</span></div>` : ""}
+      ${Number(invoice.tax) > 0 ? `<div class="totals-row"><span>الضريبة</span><span>+${Number(invoice.tax).toFixed(2)} ج.م</span></div>` : ""}
+      <div class="totals-final"><span>الإجمالي</span><span>${Number(invoice.total).toFixed(2)} ج.م</span></div>
+    </div>
+  </div>
+
+  ${invoice.notes ? `<div style="background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:16px;"><strong>ملاحظات:</strong> ${invoice.notes}</div>` : ""}
+
+  ${returns.length > 0 ? `<div style="margin-bottom:16px;"><div style="font-weight:600;color:#ea580c;margin-bottom:6px;">سجل المرتجعات</div>${returnRows}</div>` : ""}
+
+  <!-- FOOTER -->
+  <div class="footer">${footerNote || `شكراً لتعاملكم مع ${companyName}`}</div>
+</div>
+<script>window.onload = function(){ window.print(); };<\/script>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (win) { win.document.write(html); win.document.close(); }
+}
+
 function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => void; onReturn: () => void }) {
   const { data: invoice, isLoading } = useGetInvoice(id);
+  const { data: settings } = useGetInvoiceSettings();
   const { data: returns = [] } = useQuery<InvoiceReturn[]>({
     queryKey: ["invoice-returns", id],
     queryFn: () => fetchJSON(`${BASE}/invoices/${id}/returns`),
@@ -272,11 +414,29 @@ function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => voi
 
   const canReturn = invoice.status === "paid" || invoice.status === "partial_return";
   const isCancelled = invoice.status === "cancelled";
+  const companyName = (settings as any)?.companyName || "شركتي";
+  const companyPhone = (settings as any)?.companyPhone || "";
+  const companyAddress = (settings as any)?.companyAddress || "";
+  const companyLogo = (settings as any)?.companyLogo || "";
+  const primaryColor = (settings as any)?.primaryColor || "#1e40af";
 
   return (
-    <div className="space-y-5 print:p-0">
-      {/* Header */}
-      <div className="flex justify-between items-start border-b pb-4">
+    <div className="space-y-5">
+      {/* Company Header — visible in view & print */}
+      <div className="flex justify-between items-start pb-4 border-b-2" style={{ borderColor: primaryColor }}>
+        <div>
+          <h2 className="text-xl font-bold" style={{ color: primaryColor }}>{companyName}</h2>
+          {companyPhone && <p className="text-sm text-muted-foreground">📞 {companyPhone}</p>}
+          {companyAddress && <p className="text-sm text-muted-foreground">📍 {companyAddress}</p>}
+        </div>
+        {companyLogo
+          ? <img src={companyLogo} className="h-14 max-w-[140px] object-contain" alt="logo" />
+          : <div className="text-2xl font-black opacity-20">{companyName.slice(0, 2)}</div>
+        }
+      </div>
+
+      {/* Invoice Meta */}
+      <div className="flex justify-between items-start">
         <div>
           <h2 className="text-2xl font-bold">فاتورة #{invoice.invoiceNumber}</h2>
           <p className="text-muted-foreground text-sm">{format(new Date(invoice.createdAt), 'yyyy/MM/dd HH:mm')}</p>
@@ -346,38 +506,27 @@ function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => voi
       )}
 
       {/* Actions */}
-      <div className="flex justify-between items-center pt-3 border-t no-print">
+      <div className="flex justify-between items-center pt-3 border-t">
         <div className="flex gap-2 flex-wrap">
           {!isCancelled && (
             <Button variant="outline" onClick={onEdit} size="sm">
-              <Edit className="h-4 w-4 ml-1" />
-              تعديل
+              <Edit className="h-4 w-4 ml-1" />تعديل
             </Button>
           )}
           {canReturn && (
             <Button variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={onReturn} size="sm">
-              <RotateCcw className="h-4 w-4 ml-1" />
-              مرتجع
+              <RotateCcw className="h-4 w-4 ml-1" />مرتجع
             </Button>
           )}
           {(invoice as any).customerWhatsapp && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-green-600 border-green-500 hover:bg-green-50 gap-1"
-              onClick={() => openWhatsApp(
-                (invoice as any).customerWhatsapp,
-                buildInvoiceMessage({ ...invoice, items: invoice.items })
-              )}
-            >
-              <MessageCircle className="h-4 w-4" />
-              إرسال واتساب
+            <Button variant="outline" size="sm" className="text-green-600 border-green-500 hover:bg-green-50 gap-1"
+              onClick={() => openWhatsApp((invoice as any).customerWhatsapp, buildInvoiceMessage({ ...invoice, items: invoice.items }))}>
+              <MessageCircle className="h-4 w-4" />إرسال واتساب
             </Button>
           )}
         </div>
-        <Button onClick={() => window.print()} size="sm">
-          <Printer className="h-4 w-4 ml-1" />
-          طباعة
+        <Button onClick={() => printInvoiceWindow(invoice, settings, returns)} size="sm" className="gap-1">
+          <Printer className="h-4 w-4" />طباعة / PDF
         </Button>
       </div>
     </div>
