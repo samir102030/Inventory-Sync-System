@@ -427,26 +427,26 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
 <title>ريسيت #${invoice.invoiceNumber}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  @page { size: 80mm auto; margin: 4mm 3mm; }
+  @page { margin: 4mm 3mm; }
   body {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
+    font-family: Arial, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
     color: #000;
     background: #fff;
     direction: rtl;
-    width: 74mm;
+    width: 100%;
   }
   .center { text-align: center; }
   .bold { font-weight: bold; }
-  .large { font-size: 15px; font-weight: bold; }
-  .xlarge { font-size: 18px; font-weight: bold; }
-  .sep { border-top: 1px dashed #000; margin: 4px 0; }
-  .sep-thin { border-top: 1px dotted #aaa; margin: 2px 0; }
-  .item-name { font-weight: bold; margin-top: 4px; word-break: break-word; }
-  .item-row { display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 2px; }
-  .total-row { display: flex; justify-content: space-between; padding: 2px 0; }
-  .total-final { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; padding: 4px 0; border-top: 2px solid #000; margin-top: 4px; }
-  .footer { text-align: center; font-size: 10px; margin-top: 8px; }
+  .large { font-size: 18px; font-weight: bold; }
+  .sep { border-top: 2px dashed #000; margin: 6px 0; }
+  .sep-thin { border-top: 1px dotted #666; margin: 4px 0; }
+  .item-name { font-weight: bold; margin-top: 6px; word-break: break-word; font-size: 15px; }
+  .item-row { display: flex; justify-content: space-between; font-size: 14px; color: #222; margin-bottom: 3px; }
+  .total-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 15px; }
+  .total-final { display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; padding: 6px 0; border-top: 3px solid #000; margin-top: 6px; }
+  .footer { text-align: center; font-size: 13px; margin-top: 10px; }
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
@@ -454,8 +454,8 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
 </head>
 <body>
   <div class="center bold large">${companyName}</div>
-  ${companyPhone ? `<div class="center" style="font-size:11px;">${companyPhone}</div>` : ""}
-  ${companyAddress ? `<div class="center" style="font-size:10px;">${companyAddress}</div>` : ""}
+  ${companyPhone ? `<div class="center" style="font-size:15px;">${companyPhone}</div>` : ""}
+  ${companyAddress ? `<div class="center" style="font-size:13px;">${companyAddress}</div>` : ""}
   <div class="sep"></div>
 
   <div class="total-row"><span>فاتورة #</span><span class="bold">${invoice.invoiceNumber}</span></div>
