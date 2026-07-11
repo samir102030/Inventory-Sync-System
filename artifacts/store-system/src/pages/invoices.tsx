@@ -401,6 +401,92 @@ function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
   if (win) { win.document.write(html); win.document.close(); }
 }
 
+function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
+  const companyName = settings?.companyName || "شركتي";
+  const companyPhone = settings?.companyPhone || "";
+  const companyAddress = settings?.companyAddress || "";
+  const footerNote = settings?.footerNote || "";
+
+  const itemLines = (invoice.items || []).map((item: any) => {
+    const name = String(item.productName);
+    const qty = item.quantity;
+    const price = Number(item.unitPrice).toFixed(2);
+    const total = (item.quantity * item.unitPrice).toFixed(2);
+    return `<div class="item-name">${name}</div>
+            <div class="item-row"><span>${qty} × ${price}</span><span>${total} ج</span></div>`;
+  }).join('<div class="sep-thin"></div>');
+
+  const returnLines = returns.map(ret =>
+    `<div class="item-row"><span>${ret.returnNumber}</span><span style="color:#000;">-${Number(ret.total).toFixed(2)} ج</span></div>`
+  ).join("");
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8"/>
+<title>ريسيت #${invoice.invoiceNumber}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  @page { size: 80mm auto; margin: 4mm 3mm; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    color: #000;
+    background: #fff;
+    direction: rtl;
+    width: 74mm;
+  }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .large { font-size: 15px; font-weight: bold; }
+  .xlarge { font-size: 18px; font-weight: bold; }
+  .sep { border-top: 1px dashed #000; margin: 4px 0; }
+  .sep-thin { border-top: 1px dotted #aaa; margin: 2px 0; }
+  .item-name { font-weight: bold; margin-top: 4px; word-break: break-word; }
+  .item-row { display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 2px; }
+  .total-row { display: flex; justify-content: space-between; padding: 2px 0; }
+  .total-final { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; padding: 4px 0; border-top: 2px solid #000; margin-top: 4px; }
+  .footer { text-align: center; font-size: 10px; margin-top: 8px; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="center bold large">${companyName}</div>
+  ${companyPhone ? `<div class="center" style="font-size:11px;">${companyPhone}</div>` : ""}
+  ${companyAddress ? `<div class="center" style="font-size:10px;">${companyAddress}</div>` : ""}
+  <div class="sep"></div>
+
+  <div class="total-row"><span>فاتورة #</span><span class="bold">${invoice.invoiceNumber}</span></div>
+  <div class="total-row"><span>التاريخ</span><span>${new Date(invoice.createdAt).toLocaleDateString('ar-EG')} ${new Date(invoice.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span></div>
+  <div class="total-row"><span>العميل</span><span>${invoice.customerName || "نقدي"}</span></div>
+  <div class="total-row"><span>الدفع</span><span>${getPaymentLabel(invoice.paymentMethod || "")}</span></div>
+  <div class="sep"></div>
+
+  ${itemLines}
+
+  <div class="sep"></div>
+  <div class="total-row"><span>المجموع الفرعي</span><span>${Number(invoice.subtotal || 0).toFixed(2)} ج</span></div>
+  ${Number(invoice.discount) > 0 ? `<div class="total-row"><span>الخصم</span><span>-${Number(invoice.discount).toFixed(2)} ج</span></div>` : ""}
+  ${Number(invoice.tax) > 0 ? `<div class="total-row"><span>الضريبة</span><span>+${Number(invoice.tax).toFixed(2)} ج</span></div>` : ""}
+  <div class="total-final"><span>الإجمالي</span><span>${Number(invoice.total).toFixed(2)} ج.م</span></div>
+
+  ${invoice.notes ? `<div class="sep"></div><div style="font-size:10px;">ملاحظة: ${invoice.notes}</div>` : ""}
+
+  ${returns.length > 0 ? `<div class="sep"></div><div class="bold" style="font-size:11px;">مرتجعات:</div>${returnLines}` : ""}
+
+  <div class="sep"></div>
+  <div class="footer">${footerNote || `شكراً لتعاملكم مع ${companyName}`}</div>
+  <div style="margin-top:16px;"></div>
+<script>window.onload = function(){ window.print(); };<\/script>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=350,height=600");
+  if (win) { win.document.write(html); win.document.close(); }
+}
+
 function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => void; onReturn: () => void }) {
   const { data: invoice, isLoading } = useGetInvoice(id);
   const { data: settings } = useGetInvoiceSettings();
@@ -525,9 +611,14 @@ function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => voi
             </Button>
           )}
         </div>
-        <Button onClick={() => printInvoiceWindow(invoice, settings, returns)} size="sm" className="gap-1">
-          <Printer className="h-4 w-4" />طباعة / PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => printReceiptWindow(invoice, settings, returns)} size="sm" variant="outline" className="gap-1">
+            <Printer className="h-4 w-4" />ريسيت
+          </Button>
+          <Button onClick={() => printInvoiceWindow(invoice, settings, returns)} size="sm" className="gap-1">
+            <Download className="h-4 w-4" />A4 / PDF
+          </Button>
+        </div>
       </div>
     </div>
   );
