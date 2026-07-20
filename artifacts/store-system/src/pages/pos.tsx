@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
 import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
 
-type CartItem = Product & { cartQuantity: number; discount: number };
+type CartItem = Product & { cartQuantity: number; discount: number; unitPrice: number };
 type CreatedInvoice = { invoiceNumber: string; total: number; subtotal: number; discount: number; tax: number; paymentMethod: string; customerName?: string | null; customerWhatsapp?: string | null; items?: Array<{ productName: string; quantity: number; unitPrice: number }> };
 type Account = { id: number; name: string; type: string };
 
@@ -86,7 +86,7 @@ export default function POS() {
       if (existing) {
         return prev.map(item => item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item);
       }
-      return [...prev, { ...product, cartQuantity: 1, discount: 0 }];
+      return [...prev, { ...product, cartQuantity: 1, discount: 0, unitPrice: product.price }];
     });
   };
 
@@ -103,7 +103,11 @@ export default function POS() {
     setCart(prev => prev.map(item => item.id === productId ? { ...item, discount } : item));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.cartQuantity) - item.discount, 0);
+  const updateUnitPrice = (productId: number, unitPrice: number) => {
+    setCart(prev => prev.map(item => item.id === productId ? { ...item, unitPrice } : item));
+  };
+
+  const subtotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.cartQuantity) - item.discount, 0);
   const taxAmount = subtotal * (taxRate / 100);
   const total = subtotal + taxAmount - globalDiscount;
 
@@ -113,7 +117,7 @@ export default function POS() {
     const items: InvoiceItemInput[] = cart.map(item => ({
       productId: item.id,
       quantity: item.cartQuantity,
-      unitPrice: item.price,
+      unitPrice: item.unitPrice,
       discount: item.discount
     }));
 
@@ -143,7 +147,7 @@ export default function POS() {
         setSuccessInvoice({
           ...inv,
           customerWhatsapp: inv.customerWhatsapp ?? (customer as any)?.whatsapp ?? null,
-          items: cartSnapshot.map(i => ({ productName: i.name, quantity: i.cartQuantity, unitPrice: i.price })),
+          items: cartSnapshot.map(i => ({ productName: i.name, quantity: i.cartQuantity, unitPrice: i.unitPrice })),
         });
         setCart([]);
         setCustomerId("");
@@ -247,9 +251,10 @@ export default function POS() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">المنتج</TableHead>
+                  <TableHead>المنتج</TableHead>
                   <TableHead>الكمية</TableHead>
-                  <TableHead className="text-left">السعر</TableHead>
+                  <TableHead>سعر البيع</TableHead>
+                  <TableHead>الإجمالي</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -257,22 +262,33 @@ export default function POS() {
                 {cart.map(item => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">
-                      <div className="truncate w-[140px]" title={item.name}>{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{item.price} ج.م</div>
+                      <div className="truncate w-[120px]" title={item.name}>{item.name}</div>
+                      {item.unitPrice !== item.price && (
+                        <div className="text-xs text-muted-foreground line-through">{item.price} ج.م</div>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Input 
-                          type="number" 
-                          min="1" 
-                          value={item.cartQuantity} 
-                          onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
-                          className="w-16 h-8 text-center p-1"
-                        />
-                      </div>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.cartQuantity}
+                        onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+                        className="w-16 h-8 text-center p-1"
+                      />
                     </TableCell>
-                    <TableCell className="text-left">
-                      {((item.price * item.cartQuantity) - item.discount).toFixed(2)}
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.unitPrice}
+                        onChange={(e) => updateUnitPrice(item.id, parseFloat(e.target.value) || 0)}
+                        className={`w-24 h-8 text-center p-1 ${item.unitPrice !== item.price ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : ""}`}
+                        title="سعر البيع — يمكنك تعديله"
+                      />
+                    </TableCell>
+                    <TableCell className="text-left text-sm font-bold">
+                      {((item.unitPrice * item.cartQuantity) - item.discount).toFixed(2)}
                     </TableCell>
                     <TableCell className="p-2">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeFromCart(item.id)}>
