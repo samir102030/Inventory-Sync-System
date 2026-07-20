@@ -543,22 +543,45 @@ function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => voi
             <TableHead>الكمية</TableHead>
             <TableHead>سعر الوحدة</TableHead>
             <TableHead className="text-left">المجموع</TableHead>
+            <TableHead className="text-left text-green-700">الربح 🔒</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {invoice.items?.map((item) => (
-            <TableRow key={item.id}>
-              <TableCell>{item.productName}</TableCell>
-              <TableCell>{item.quantity}</TableCell>
-              <TableCell>{item.unitPrice} ج.م</TableCell>
-              <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</TableCell>
-            </TableRow>
-          ))}
+          {invoice.items?.map((item) => {
+            const cost = (item as any).costPrice ?? 0;
+            const itemProfit = (item.unitPrice - cost) * item.quantity - item.discount;
+            return (
+              <TableRow key={item.id}>
+                <TableCell>{item.productName}</TableCell>
+                <TableCell>{item.quantity}</TableCell>
+                <TableCell>{item.unitPrice} ج.م</TableCell>
+                <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice - item.discount).toFixed(2)} ج.م</TableCell>
+                <TableCell className={`text-left font-bold text-sm ${itemProfit >= 0 ? "text-green-700" : "text-red-600"}`}>
+                  {cost > 0 ? `${itemProfit.toFixed(2)} ج.م` : <span className="text-muted-foreground text-xs">—</span>}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
 
-      {/* Totals */}
-      <div className="flex justify-end pt-2 border-t">
+      {/* Totals + Profit */}
+      <div className="flex justify-end pt-2 border-t gap-4 flex-wrap">
+        {(() => {
+          const items = invoice.items ?? [];
+          const totalCost = items.reduce((s, i) => s + (((i as any).costPrice ?? 0) * i.quantity), 0);
+          const hasAnyCost = items.some(i => ((i as any).costPrice ?? 0) > 0);
+          const grossProfit = invoice.total - totalCost;
+          const margin = invoice.total > 0 ? (grossProfit / invoice.total) * 100 : 0;
+          return hasAnyCost ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm space-y-1 min-w-52">
+              <div className="font-semibold text-green-800 flex items-center gap-1 mb-1">🔒 الربح (داخلي فقط)</div>
+              <div className="flex justify-between"><span className="text-muted-foreground">إجمالي التكلفة:</span><span>{totalCost.toFixed(2)} ج.م</span></div>
+              <div className="flex justify-between font-bold text-green-700"><span>صافي الربح:</span><span>{grossProfit.toFixed(2)} ج.م</span></div>
+              <div className="flex justify-between text-xs text-muted-foreground"><span>هامش الربح:</span><span>{margin.toFixed(1)}%</span></div>
+            </div>
+          ) : null;
+        })()}
         <div className="w-64 space-y-1.5">
           <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي:</span><span>{invoice.subtotal?.toFixed(2)} ج.م</span></div>
           {invoice.discount > 0 && <div className="flex justify-between text-sm text-destructive"><span>الخصم:</span><span>-{invoice.discount.toFixed(2)} ج.م</span></div>}

@@ -30,6 +30,7 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   barcode: text("barcode"),
   quantity: numeric("quantity", { precision: 10, scale: 3 }).notNull(),
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+  costPrice: numeric("cost_price", { precision: 12, scale: 2 }).notNull().default("0"),
   discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 12, scale: 2 }).notNull(),
 });

@@ -27,7 +27,7 @@ type Quotation = {
   status: string; notes?: string | null; validUntil?: string | null; createdAt: string;
   items?: QItem[];
 };
-type Product = { id: number; name: string; barcode?: string | null; price: number; stock: number };
+type Product = { id: number; name: string; barcode?: string | null; price: number; stock: number; costPrice?: number | null };
 type Customer = { id: number; name: string; phone?: string | null };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -397,21 +397,51 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
             <TableHead>الكمية</TableHead>
             <TableHead>السعر</TableHead>
             <TableHead className="text-left">المجموع</TableHead>
+            <TableHead className="text-left text-green-700">الربح 🔒</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {full.items?.map((item, idx) => (
-            <TableRow key={idx}>
-              <TableCell>{item.productName}</TableCell>
-              <TableCell>{item.quantity}</TableCell>
-              <TableCell>{Number(item.unitPrice).toFixed(2)} ج.م</TableCell>
-              <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</TableCell>
-            </TableRow>
-          ))}
+          {full.items?.map((item, idx) => {
+            const product = (products as Product[]).find(p => p.id === item.productId);
+            const cost = product?.costPrice ?? 0;
+            const itemProfit = (item.unitPrice - cost) * item.quantity;
+            return (
+              <TableRow key={idx}>
+                <TableCell>{item.productName}</TableCell>
+                <TableCell>{item.quantity}</TableCell>
+                <TableCell>{Number(item.unitPrice).toFixed(2)} ج.م</TableCell>
+                <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</TableCell>
+                <TableCell className={`text-left font-bold text-sm ${cost > 0 ? (itemProfit >= 0 ? "text-green-700" : "text-red-600") : "text-muted-foreground"}`}>
+                  {cost > 0 ? `${itemProfit.toFixed(2)} ج.م` : <span className="text-xs">—</span>}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
 
-      <div className="flex justify-end pt-2 border-t">
+      <div className="flex justify-end pt-2 border-t gap-4 flex-wrap">
+        {(() => {
+          const items = full.items ?? [];
+          const totalCost = items.reduce((s, item) => {
+            const product = (products as Product[]).find(p => p.id === item.productId);
+            return s + ((product?.costPrice ?? 0) * item.quantity);
+          }, 0);
+          const hasAnyCost = items.some(item => {
+            const product = (products as Product[]).find(p => p.id === item.productId);
+            return (product?.costPrice ?? 0) > 0;
+          });
+          const grossProfit = full.total - totalCost - full.discount;
+          const margin = full.total > 0 ? (grossProfit / full.total) * 100 : 0;
+          return hasAnyCost ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm space-y-1 min-w-52">
+              <div className="font-semibold text-green-800 flex items-center gap-1 mb-1">🔒 الربح المتوقع (داخلي)</div>
+              <div className="flex justify-between"><span className="text-muted-foreground">إجمالي التكلفة:</span><span>{totalCost.toFixed(2)} ج.م</span></div>
+              <div className="flex justify-between font-bold text-green-700"><span>صافي الربح:</span><span>{grossProfit.toFixed(2)} ج.م</span></div>
+              <div className="flex justify-between text-xs text-muted-foreground"><span>هامش الربح:</span><span>{margin.toFixed(1)}%</span></div>
+            </div>
+          ) : null;
+        })()}
         <div className="w-64 space-y-1.5">
           <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي:</span><span>{full.subtotal.toFixed(2)} ج.م</span></div>
           {full.discount > 0 && <div className="flex justify-between text-sm text-destructive"><span>الخصم:</span><span>-{full.discount.toFixed(2)} ج.م</span></div>}

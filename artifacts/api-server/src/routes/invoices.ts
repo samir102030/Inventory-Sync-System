@@ -128,7 +128,7 @@ router.post("/invoices", async (req, res) => {
   }
 
   let subtotal = 0;
-  const resolvedItems: Array<{ productId: number; productName: string; quantity: number; unitPrice: number; discount: number; total: number }> = [];
+  const resolvedItems: Array<{ productId: number; productName: string; barcode: string | null; quantity: number; unitPrice: number; costPrice: number; discount: number; total: number }> = [];
 
   for (const item of items) {
     const products = await db.select().from(productsTable).where(eq(productsTable.id, Number(item.productId))).limit(1);
@@ -136,10 +136,11 @@ router.post("/invoices", async (req, res) => {
     if (!product) return res.status(400).json({ error: `Product ${item.productId} not found` });
     const qty = Number(item.quantity);
     const price = Number(item.unitPrice);
+    const cost = Number(product.costPrice ?? 0);
     const itemDiscount = Number(item.discount ?? 0);
     const itemTotal = qty * price - itemDiscount;
     subtotal += itemTotal;
-    resolvedItems.push({ productId: product.id, productName: product.name, barcode: product.barcode ?? null, quantity: qty, unitPrice: price, discount: itemDiscount, total: itemTotal });
+    resolvedItems.push({ productId: product.id, productName: product.name, barcode: product.barcode ?? null, quantity: qty, unitPrice: price, costPrice: cost, discount: itemDiscount, total: itemTotal });
   }
 
   const discountAmt = Number(discount ?? 0);
@@ -168,6 +169,7 @@ router.post("/invoices", async (req, res) => {
       barcode: item.barcode,
       quantity: String(item.quantity),
       unitPrice: String(item.unitPrice),
+      costPrice: String(item.costPrice),
       discount: String(item.discount),
       total: String(item.total),
     });
@@ -233,6 +235,7 @@ router.get("/invoices/:id", async (req, res) => {
     barcode: i.barcode ?? null,
     quantity: Number(i.quantity),
     unitPrice: Number(i.unitPrice),
+    costPrice: Number(i.costPrice ?? 0),
     discount: Number(i.discount),
     total: Number(i.total),
   }));
