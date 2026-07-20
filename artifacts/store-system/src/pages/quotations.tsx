@@ -10,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Plus, Eye, Edit, Trash2, Printer, FileCheck, Download } from "lucide-react";
+import { Search, Plus, Eye, Edit, Trash2, Printer, FileCheck, Download, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { exportToExcel } from "@/lib/excel";
+import { downloadPDF } from "@/lib/pdf";
 
 const BASE = "/api";
 const fetchJSON = (url: string, opts?: RequestInit) =>
@@ -43,7 +44,20 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{STATUS_LABELS[status] || status}</Badge>;
 }
 
-function printQuotationA4(q: Quotation, settings: any) {
+async function downloadQuotationPDF(q: Quotation, settings: any) {
+  const html = buildQuotationHTML(q, settings);
+  const container = document.createElement("div");
+  container.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:#fff;";
+  container.innerHTML = html;
+  document.body.appendChild(container);
+  try {
+    await downloadPDF(container, `عرض-سعر-${q.quotationNumber}.pdf`);
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+function buildQuotationHTML(q: Quotation, settings: any): string {
   const companyName = settings?.companyName || "شركتي";
   const companyPhone = settings?.companyPhone || "";
   const companyAddress = settings?.companyAddress || "";
@@ -60,68 +74,55 @@ function printQuotationA4(q: Quotation, settings: any) {
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:bold;">${(item.quantity * item.unitPrice).toFixed(2)}</td>
     </tr>`).join("");
 
-  const html = `<!DOCTYPE html>
-<html dir="rtl" lang="ar"><head><meta charset="UTF-8"/>
-<title>عرض سعر #${q.quotationNumber}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  @page{size:A4;margin:15mm 12mm;}
-  body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#1a1a1a;background:#fff;direction:rtl;}
-  .page{max-width:780px;margin:0 auto;padding:20px;}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:3px solid ${primaryColor};margin-bottom:20px;}
-  .logo{max-height:80px;max-width:180px;object-fit:contain;}
-  .company-name{font-size:22px;font-weight:700;color:${primaryColor};}
-  .company-detail{font-size:12px;color:#555;margin-top:3px;}
-  .title-banner{background:${primaryColor};color:#fff;text-align:center;padding:10px;font-size:18px;font-weight:700;border-radius:6px;margin-bottom:16px;}
-  .meta{display:flex;justify-content:space-between;background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;}
-  .meta-block h3{font-size:11px;color:#888;margin-bottom:4px;}
-  .meta-block p{font-weight:600;font-size:14px;}
-  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-  thead{background:${primaryColor};color:#fff;}
-  thead th{padding:10px 12px;text-align:right;font-size:13px;}
-  thead th:not(:first-child){text-align:center;}
-  tbody tr:nth-child(even){background:#f9fafb;}
-  .totals{display:flex;justify-content:flex-end;margin-bottom:16px;}
-  .totals-box{width:260px;}
-  .totals-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;}
-  .totals-final{display:flex;justify-content:space-between;padding:8px 0 0;font-size:16px;font-weight:700;color:${primaryColor};}
-  .footer{margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#888;}
-  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-</style></head><body>
-<div class="page">
-  <div class="header">
+  return `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;background:#fff;padding:24px;direction:rtl;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:3px solid ${primaryColor};margin-bottom:20px;">
     <div>
-      <div class="company-name">${companyName}</div>
-      ${companyPhone ? `<div class="company-detail">📞 ${companyPhone}</div>` : ""}
-      ${companyAddress ? `<div class="company-detail">📍 ${companyAddress}</div>` : ""}
-      ${companyEmail ? `<div class="company-detail">✉ ${companyEmail}</div>` : ""}
+      <div style="font-size:22px;font-weight:700;color:${primaryColor};">${companyName}</div>
+      ${companyPhone ? `<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${companyPhone}</div>` : ""}
+      ${companyAddress ? `<div style="font-size:12px;color:#555;margin-top:2px;">📍 ${companyAddress}</div>` : ""}
+      ${companyEmail ? `<div style="font-size:12px;color:#555;margin-top:2px;">✉ ${companyEmail}</div>` : ""}
     </div>
-    ${companyLogo ? `<img src="${companyLogo}" class="logo" alt="logo"/>` : `<div style="width:90px;height:50px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
+    ${companyLogo ? `<img src="${companyLogo}" style="max-height:80px;max-width:180px;object-fit:contain;" crossorigin="anonymous"/>` : `<div style="width:90px;height:50px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
   </div>
-  <div class="title-banner">عرض سعر / Quotation</div>
-  <div class="meta">
-    <div class="meta-block"><h3>رقم العرض</h3><p>${q.quotationNumber}</p></div>
-    <div class="meta-block"><h3>التاريخ</h3><p>${new Date(q.createdAt).toLocaleDateString('en-GB')}</p></div>
-    <div class="meta-block"><h3>العميل</h3><p>${q.customerName || "—"}</p></div>
-    <div class="meta-block"><h3>صالح حتى</h3><p>${q.validUntil ? new Date(q.validUntil).toLocaleDateString('en-GB') : "—"}</p></div>
-    <div class="meta-block"><h3>الحالة</h3><p>${STATUS_LABELS[q.status] || q.status}</p></div>
+  <div style="background:${primaryColor};color:#fff;text-align:center;padding:10px;font-size:18px;font-weight:700;border-radius:6px;margin-bottom:16px;">عرض سعر / Quotation</div>
+  <div style="display:flex;justify-content:space-between;background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
+    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">رقم العرض</div><div style="font-weight:600;">${q.quotationNumber}</div></div>
+    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">التاريخ</div><div style="font-weight:600;">${new Date(q.createdAt).toLocaleDateString('en-GB')}</div></div>
+    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">العميل</div><div style="font-weight:600;">${q.customerName || "—"}</div></div>
+    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">صالح حتى</div><div style="font-weight:600;">${q.validUntil ? new Date(q.validUntil).toLocaleDateString('en-GB') : "—"}</div></div>
   </div>
-  <table>
-    <thead><tr><th>المنتج / الخدمة</th><th style="text-align:center;">الكمية</th><th style="text-align:center;">سعر الوحدة (ج.م)</th><th style="text-align:center;">المجموع (ج.م)</th></tr></thead>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+    <thead><tr style="background:${primaryColor};color:#fff;">
+      <th style="padding:10px 12px;text-align:right;">المنتج / الخدمة</th>
+      <th style="padding:10px 12px;text-align:center;">الكمية</th>
+      <th style="padding:10px 12px;text-align:center;">سعر الوحدة (ج.م)</th>
+      <th style="padding:10px 12px;text-align:center;">المجموع (ج.م)</th>
+    </tr></thead>
     <tbody>${itemRows}</tbody>
   </table>
-  <div class="totals"><div class="totals-box">
-    <div class="totals-row"><span>المجموع الفرعي</span><span>${Number(q.subtotal).toFixed(2)} ج.م</span></div>
-    ${Number(q.discount) > 0 ? `<div class="totals-row" style="color:#dc2626;"><span>الخصم</span><span>-${Number(q.discount).toFixed(2)} ج.م</span></div>` : ""}
-    ${Number(q.tax) > 0 ? `<div class="totals-row"><span>الضريبة</span><span>+${Number(q.tax).toFixed(2)} ج.م</span></div>` : ""}
-    <div class="totals-final"><span>الإجمالي</span><span>${Number(q.total).toFixed(2)} ج.م</span></div>
-  </div></div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+    <div style="width:260px;">
+      <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;"><span>المجموع الفرعي</span><span>${Number(q.subtotal).toFixed(2)} ج.م</span></div>
+      ${Number(q.discount) > 0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;color:#dc2626;border-bottom:1px solid #f0f0f0;"><span>الخصم</span><span>-${Number(q.discount).toFixed(2)} ج.م</span></div>` : ""}
+      ${Number(q.tax) > 0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;"><span>الضريبة</span><span>+${Number(q.tax).toFixed(2)} ج.م</span></div>` : ""}
+      <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:16px;font-weight:700;color:${primaryColor};"><span>الإجمالي</span><span>${Number(q.total).toFixed(2)} ج.م</span></div>
+    </div>
+  </div>
   ${q.notes ? `<div style="background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:16px;"><strong>ملاحظات:</strong> ${q.notes}</div>` : ""}
-  <div class="footer">${footerNote || `هذا العرض صادر من ${companyName} — نتطلع للتعامل معكم`}</div>
-</div>
-<script>window.onload=function(){window.print();};<\/script>
-</body></html>`;
+  <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#888;">${footerNote || `هذا العرض صادر من ${companyName} — نتطلع للتعامل معكم`}</div>
+</div>`;
+}
 
+function printQuotationA4(q: Quotation, settings: any) {
+  const primaryColor = settings?.primaryColor || "#1e40af";
+  const innerHtml = buildQuotationHTML(q, settings);
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/>
+<title>عرض سعر #${q.quotationNumber}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+thead{background:${primaryColor}!important;-webkit-print-color-adjust:exact;}</style>
+</head><body>${innerHtml}
+<script>window.onload=function(){window.print();};<\/script></body></html>`;
   const win = window.open("", "_blank", "width=900,height=700");
   if (win) { win.document.write(html); win.document.close(); }
 }
@@ -344,6 +345,7 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: settings } = useGetInvoiceSettings();
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const { data: full, isLoading } = useQuery<Quotation>({
     queryKey: ["quotations", quotation.id],
@@ -454,8 +456,14 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
           <Button variant="outline" size="sm" onClick={() => printQuotationA4(full, settings)} className="gap-1">
             <Printer className="h-4 w-4" />طباعة
           </Button>
-          <Button size="sm" onClick={() => printQuotationA4(full, settings)} className="gap-1">
-            <Download className="h-4 w-4" />PDF
+          <Button size="sm" disabled={pdfLoading} className="gap-1"
+            onClick={async () => {
+              setPdfLoading(true);
+              try { await downloadQuotationPDF(full, settings); }
+              finally { setPdfLoading(false); }
+            }}>
+            {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {pdfLoading ? "جاري التحضير..." : "تحميل PDF"}
           </Button>
         </div>
       </div>
