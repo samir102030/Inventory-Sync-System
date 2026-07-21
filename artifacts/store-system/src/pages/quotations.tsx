@@ -20,6 +20,15 @@ const BASE = "/api";
 const fetchJSON = (url: string, opts?: RequestInit) =>
   fetch(url, { credentials: "include", ...opts }).then(r => r.json());
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 type QItem = { productId?: number | null; productName: string; quantity: number; unitPrice: number };
 type Quotation = {
   id: number; quotationNumber: string; customerId?: number | null; customerName?: string | null;
@@ -58,17 +67,17 @@ async function downloadQuotationPDF(q: Quotation, settings: any) {
 }
 
 function buildQuotationHTML(q: Quotation, settings: any): string {
-  const companyName = settings?.companyName || "شركتي";
-  const companyPhone = settings?.companyPhone || "";
-  const companyAddress = settings?.companyAddress || "";
-  const companyEmail = (settings as any)?.companyEmail || "";
+  const companyName = escapeHtml(settings?.companyName || "شركتي");
+  const companyPhone = escapeHtml(settings?.companyPhone || "");
+  const companyAddress = escapeHtml(settings?.companyAddress || "");
+  const companyEmail = escapeHtml((settings as any)?.companyEmail || "");
   const companyLogo = (settings as any)?.companyLogo || "";
-  const footerNote = (settings as any)?.footerNote || "";
+  const footerNote = escapeHtml((settings as any)?.footerNote || "");
   const primaryColor = settings?.primaryColor || "#1e40af";
 
   const itemRows = (q.items || []).map(item => `
     <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">${item.productName}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">${escapeHtml(item.productName)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${item.quantity}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${Number(item.unitPrice).toFixed(2)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:bold;">${(item.quantity * item.unitPrice).toFixed(2)}</td>
@@ -86,9 +95,9 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
   </div>
   <div style="background:${primaryColor};color:#fff;text-align:center;padding:10px;font-size:18px;font-weight:700;border-radius:6px;margin-bottom:16px;">عرض سعر / Quotation</div>
   <div style="display:flex;justify-content:space-between;background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
-    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">رقم العرض</div><div style="font-weight:600;">${q.quotationNumber}</div></div>
+    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">رقم العرض</div><div style="font-weight:600;">${escapeHtml(q.quotationNumber)}</div></div>
     <div><div style="font-size:11px;color:#888;margin-bottom:4px;">التاريخ</div><div style="font-weight:600;">${new Date(q.createdAt).toLocaleDateString('en-GB')}</div></div>
-    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">العميل</div><div style="font-weight:600;">${q.customerName || "—"}</div></div>
+    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">العميل</div><div style="font-weight:600;">${escapeHtml(q.customerName || "—")}</div></div>
     <div><div style="font-size:11px;color:#888;margin-bottom:4px;">صالح حتى</div><div style="font-weight:600;">${q.validUntil ? new Date(q.validUntil).toLocaleDateString('en-GB') : "—"}</div></div>
   </div>
   <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
@@ -108,7 +117,7 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
       <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:16px;font-weight:700;color:${primaryColor};"><span>الإجمالي</span><span>${Number(q.total).toFixed(2)} ج.م</span></div>
     </div>
   </div>
-  ${q.notes ? `<div style="background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:16px;"><strong>ملاحظات:</strong> ${q.notes}</div>` : ""}
+  ${q.notes ? `<div style="background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:16px;"><strong>ملاحظات:</strong> ${escapeHtml(q.notes)}</div>` : ""}
   <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#888;">${footerNote || `هذا العرض صادر من ${companyName} — نتطلع للتعامل معكم`}</div>
 </div>`;
 }
@@ -117,7 +126,7 @@ function printQuotationA4(q: Quotation, settings: any) {
   const primaryColor = settings?.primaryColor || "#1e40af";
   const innerHtml = buildQuotationHTML(q, settings);
   const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/>
-<title>عرض سعر #${q.quotationNumber}</title>
+<title>عرض سعر #${escapeHtml(q.quotationNumber)}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 thead{background:${primaryColor}!important;-webkit-print-color-adjust:exact;}</style>

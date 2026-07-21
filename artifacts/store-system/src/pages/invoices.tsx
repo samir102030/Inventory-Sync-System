@@ -20,6 +20,15 @@ const BASE = "/api";
 const fetchJSON = (url: string, opts?: RequestInit) =>
   fetch(url, { credentials: "include", ...opts }).then(r => r.json());
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 type ReturnItem = { productId: number; productName: string; quantity: number; unitPrice: number; total: number };
 type InvoiceReturn = { id: number; returnNumber: string; reason?: string | null; total: number; createdAt: string; items: ReturnItem[] };
 
@@ -261,17 +270,17 @@ function ReturnDialog({ invoiceId, onClose }: { invoiceId: number; onClose: () =
 }
 
 function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
-  const companyName = settings?.companyName || "شركتي";
-  const companyPhone = settings?.companyPhone || "";
-  const companyAddress = settings?.companyAddress || "";
-  const companyEmail = settings?.companyEmail || "";
+  const companyName = escapeHtml(settings?.companyName || "شركتي");
+  const companyPhone = escapeHtml(settings?.companyPhone || "");
+  const companyAddress = escapeHtml(settings?.companyAddress || "");
+  const companyEmail = escapeHtml(settings?.companyEmail || "");
   const companyLogo = settings?.companyLogo || "";
-  const footerNote = settings?.footerNote || "";
+  const footerNote = escapeHtml(settings?.footerNote || "");
   const primaryColor = settings?.primaryColor || "#1e40af";
 
   const itemRows = (invoice.items || []).map((item: any) => `
     <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">${item.productName}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">${escapeHtml(item.productName)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${item.quantity}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${Number(item.unitPrice).toFixed(2)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:bold;">${(item.quantity * item.unitPrice).toFixed(2)}</td>
@@ -280,16 +289,16 @@ function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
   const returnRows = returns.map(ret => `
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px;margin-top:6px;">
       <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;">
-        <span>${ret.returnNumber}</span><span style="color:#ea580c;">${Number(ret.total).toFixed(2)} ج.م</span>
+        <span>${escapeHtml(ret.returnNumber)}</span><span style="color:#ea580c;">${Number(ret.total).toFixed(2)} ج.م</span>
       </div>
-      <div style="font-size:11px;color:#666;margin-top:4px;">${new Date(ret.createdAt).toLocaleString('ar-EG')}${ret.reason ? ` — ${ret.reason}` : ''}</div>
+      <div style="font-size:11px;color:#666;margin-top:4px;">${new Date(ret.createdAt).toLocaleString('ar-EG')}${ret.reason ? ` — ${escapeHtml(ret.reason)}` : ''}</div>
     </div>`).join("");
 
   const html = `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8"/>
-<title>فاتورة #${invoice.invoiceNumber}</title>
+<title>فاتورة #${escapeHtml(invoice.invoiceNumber)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; font-size:14px; color:#1a1a1a; background:#fff; direction:rtl; }
@@ -343,7 +352,7 @@ function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
   <div class="meta">
     <div class="meta-block">
       <h3>رقم الفاتورة</h3>
-      <p>${invoice.invoiceNumber}</p>
+      <p>${escapeHtml(invoice.invoiceNumber)}</p>
     </div>
     <div class="meta-block">
       <h3>التاريخ</h3>
@@ -351,7 +360,7 @@ function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
     </div>
     <div class="meta-block">
       <h3>العميل</h3>
-      <p>${invoice.customerName || "عميل نقدي"}</p>
+      <p>${escapeHtml(invoice.customerName || "عميل نقدي")}</p>
     </div>
     <div class="meta-block">
       <h3>طريقة الدفع</h3>
@@ -386,7 +395,7 @@ function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
     </div>
   </div>
 
-  ${invoice.notes ? `<div style="background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:16px;"><strong>ملاحظات:</strong> ${invoice.notes}</div>` : ""}
+  ${invoice.notes ? `<div style="background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:16px;"><strong>ملاحظات:</strong> ${escapeHtml(invoice.notes)}</div>` : ""}
 
   ${returns.length > 0 ? `<div style="margin-bottom:16px;"><div style="font-weight:600;color:#ea580c;margin-bottom:6px;">سجل المرتجعات</div>${returnRows}</div>` : ""}
 
@@ -402,13 +411,13 @@ function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
 }
 
 function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
-  const companyName = settings?.companyName || "شركتي";
-  const companyPhone = settings?.companyPhone || "";
-  const companyAddress = settings?.companyAddress || "";
-  const footerNote = settings?.footerNote || "";
+  const companyName = escapeHtml(settings?.companyName || "شركتي");
+  const companyPhone = escapeHtml(settings?.companyPhone || "");
+  const companyAddress = escapeHtml(settings?.companyAddress || "");
+  const footerNote = escapeHtml(settings?.footerNote || "");
 
   const itemLines = (invoice.items || []).map((item: any) => {
-    const name = String(item.productName);
+    const name = escapeHtml(item.productName);
     const qty = item.quantity;
     const price = Number(item.unitPrice).toFixed(2);
     const total = (item.quantity * item.unitPrice).toFixed(2);
@@ -424,7 +433,7 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8"/>
-<title>ريسيت #${invoice.invoiceNumber}</title>
+<title>ريسيت #${escapeHtml(invoice.invoiceNumber)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   @page { margin: 4mm 3mm; }
@@ -458,9 +467,9 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
   ${companyAddress ? `<div class="center" style="font-size:13px;">${companyAddress}</div>` : ""}
   <div class="sep"></div>
 
-  <div class="total-row"><span>فاتورة #</span><span class="bold">${invoice.invoiceNumber}</span></div>
+  <div class="total-row"><span>فاتورة #</span><span class="bold">${escapeHtml(invoice.invoiceNumber)}</span></div>
   <div class="total-row"><span>التاريخ</span><span dir="ltr">${new Date(invoice.createdAt).toLocaleDateString('en-GB')} ${new Date(invoice.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span></div>
-  <div class="total-row"><span>العميل</span><span>${invoice.customerName || "نقدي"}</span></div>
+  <div class="total-row"><span>العميل</span><span>${escapeHtml(invoice.customerName || "نقدي")}</span></div>
   <div class="total-row"><span>الدفع</span><span>${getPaymentLabel(invoice.paymentMethod || "")}</span></div>
   <div class="sep"></div>
 
@@ -472,7 +481,7 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
   ${Number(invoice.tax) > 0 ? `<div class="total-row"><span>الضريبة</span><span>+${Number(invoice.tax).toFixed(2)} ج</span></div>` : ""}
   <div class="total-final"><span>الإجمالي</span><span>${Number(invoice.total).toFixed(2)} ج.م</span></div>
 
-  ${invoice.notes ? `<div class="sep"></div><div style="font-size:10px;">ملاحظة: ${invoice.notes}</div>` : ""}
+  ${invoice.notes ? `<div class="sep"></div><div style="font-size:10px;">ملاحظة: ${escapeHtml(invoice.notes)}</div>` : ""}
 
   ${returns.length > 0 ? `<div class="sep"></div><div class="bold" style="font-size:11px;">مرتجعات:</div>${returnLines}` : ""}
 
