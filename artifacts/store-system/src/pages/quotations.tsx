@@ -458,13 +458,15 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
 
       <div className="flex justify-between items-center pt-3 border-t flex-wrap gap-2">
         <div className="flex gap-2 flex-wrap">
+          {full.status !== "converted" && (
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              <Edit className="h-4 w-4 ml-1" />تعديل
+            </Button>
+          )}
           {full.status === "draft" && (
-            <>
-              <Button variant="outline" size="sm" onClick={onEdit}><Edit className="h-4 w-4 ml-1" />تعديل</Button>
-              <Button variant="outline" size="sm" onClick={() => statusMutation.mutate("sent")}>
-                إرسال للعميل
-              </Button>
-            </>
+            <Button variant="outline" size="sm" onClick={() => statusMutation.mutate("sent")}>
+              إرسال للعميل
+            </Button>
           )}
           {full.status === "sent" && (
             <>
