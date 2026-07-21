@@ -431,7 +431,7 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
             const product = (products as Product[]).find(p => p.id === item.productId);
             return (product?.costPrice ?? 0) > 0;
           });
-          const grossProfit = full.total - totalCost - full.discount;
+          const grossProfit = full.total - totalCost;
           const margin = full.total > 0 ? (grossProfit / full.total) * 100 : 0;
           return hasAnyCost ? (
             <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm space-y-1 min-w-52">

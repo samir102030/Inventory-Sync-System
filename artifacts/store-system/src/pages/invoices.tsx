@@ -549,7 +549,7 @@ function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => voi
         <TableBody>
           {invoice.items?.map((item) => {
             const cost = (item as any).costPrice ?? 0;
-            const itemProfit = (item.unitPrice - cost) * item.quantity - item.discount;
+            const itemProfit = (item.unitPrice - cost) * item.quantity - (item.discount ?? 0);
             return (
               <TableRow key={item.id}>
                 <TableCell>{item.productName}</TableCell>
