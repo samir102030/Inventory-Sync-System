@@ -29,6 +29,14 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#x27;");
 }
 
+function safeSrcUrl(url: string): string {
+  if (!url) return "";
+  const trimmed = url.trim();
+  if (/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(trimmed)) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return escapeHtml(trimmed);
+  return "";
+}
+
 type ReturnItem = { productId: number; productName: string; quantity: number; unitPrice: number; total: number };
 type InvoiceReturn = { id: number; returnNumber: string; reason?: string | null; total: number; createdAt: string; items: ReturnItem[] };
 
@@ -345,7 +353,7 @@ function printInvoiceWindow(invoice: any, settings: any, returns: any[]) {
       ${companyAddress ? `<div class="company-detail">📍 ${companyAddress}</div>` : ""}
       ${companyEmail ? `<div class="company-detail">✉ ${companyEmail}</div>` : ""}
     </div>
-    ${companyLogo ? `<img src="${companyLogo}" class="logo" alt="logo"/>` : `<div style="width:100px;height:60px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
+    ${safeSrcUrl(companyLogo) ? `<img src="${safeSrcUrl(companyLogo)}" class="logo" alt="logo"/>` : `<div style="width:100px;height:60px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
   </div>
 
   <!-- INVOICE META -->
@@ -426,7 +434,7 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
   }).join('<div class="sep-thin"></div>');
 
   const returnLines = returns.map(ret =>
-    `<div class="item-row"><span>${ret.returnNumber}</span><span style="color:#000;">-${Number(ret.total).toFixed(2)} ج</span></div>`
+    `<div class="item-row"><span>${escapeHtml(ret.returnNumber)}</span><span style="color:#000;">-${Number(ret.total).toFixed(2)} ج</span></div>`
   ).join("");
 
   const html = `<!DOCTYPE html>

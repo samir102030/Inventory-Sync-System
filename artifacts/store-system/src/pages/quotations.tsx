@@ -29,6 +29,14 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#x27;");
 }
 
+function safeSrcUrl(url: string): string {
+  if (!url) return "";
+  const trimmed = url.trim();
+  if (/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(trimmed)) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return escapeHtml(trimmed);
+  return "";
+}
+
 type QItem = { productId?: number | null; productName: string; quantity: number; unitPrice: number };
 type Quotation = {
   id: number; quotationNumber: string; customerId?: number | null; customerName?: string | null;
@@ -91,7 +99,7 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
       ${companyAddress ? `<div style="font-size:12px;color:#555;margin-top:2px;">📍 ${companyAddress}</div>` : ""}
       ${companyEmail ? `<div style="font-size:12px;color:#555;margin-top:2px;">✉ ${companyEmail}</div>` : ""}
     </div>
-    ${companyLogo ? `<img src="${companyLogo}" style="max-height:80px;max-width:180px;object-fit:contain;" crossorigin="anonymous"/>` : `<div style="width:90px;height:50px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
+    ${safeSrcUrl(companyLogo) ? `<img src="${safeSrcUrl(companyLogo)}" style="max-height:80px;max-width:180px;object-fit:contain;" crossorigin="anonymous"/>` : `<div style="width:90px;height:50px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
   </div>
   <div style="background:${primaryColor};color:#fff;text-align:center;padding:10px;font-size:18px;font-weight:700;border-radius:6px;margin-bottom:16px;">عرض سعر / Quotation</div>
   <div style="display:flex;justify-content:space-between;background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
