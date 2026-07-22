@@ -555,8 +555,8 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
           </Button>
           <Button size="sm" variant="outline" className="gap-1 text-green-700 border-green-500 hover:bg-green-50"
             onClick={() => {
-              setWaPhone(customer?.whatsapp || customer?.phone || "");
-              setWaDialog(true);
+              if (!waDialog) setWaPhone(customer?.whatsapp || customer?.phone || "");
+              setWaDialog(v => !v);
             }}>
             <MessageCircle className="h-4 w-4" />
             واتساب
@@ -564,45 +564,42 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
         </div>
       </div>
 
-      {/* WhatsApp Send Dialog */}
-      <Dialog open={waDialog} onOpenChange={setWaDialog}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5 text-green-600" />
-              إرسال عرض السعر عبر واتساب
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <Label>رقم الواتساب</Label>
-              <Input
-                dir="ltr"
-                placeholder="01xxxxxxxxx"
-                value={waPhone}
-                onChange={e => setWaPhone(e.target.value)}
-                className="text-left"
-              />
-              <p className="text-xs text-muted-foreground">اكتب الرقم بدون مسافات أو رموز</p>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setWaDialog(false)}>إلغاء</Button>
-              <Button
-                size="sm"
-                className="bg-green-600 hover:bg-green-700 gap-1"
-                disabled={!waPhone.trim()}
-                onClick={() => {
-                  openWhatsApp(waPhone.trim(), buildQuotationMessage(full));
-                  setWaDialog(false);
-                  if (full.status === "draft") statusMutation.mutate("sent");
-                }}>
-                <MessageCircle className="h-4 w-4" />
-                إرسال
-              </Button>
-            </div>
+      {/* WhatsApp inline panel — avoids nested-dialog focus trap */}
+      {waDialog && (
+        <div className="border border-green-200 bg-green-50 rounded-lg p-4 space-y-3">
+          <p className="text-sm font-medium text-green-800 flex items-center gap-2">
+            <MessageCircle className="h-4 w-4" />
+            إرسال عرض السعر عبر واتساب
+          </p>
+          <div className="space-y-1">
+            <Label className="text-xs text-green-700">رقم الواتساب</Label>
+            <Input
+              dir="ltr"
+              placeholder="01xxxxxxxxx"
+              value={waPhone}
+              onChange={e => setWaPhone(e.target.value)}
+              className="text-left bg-white"
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">اكتب الرقم بدون مسافات أو رموز</p>
           </div>
-        </DialogContent>
-      </Dialog>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              className="bg-green-600 hover:bg-green-700 gap-1"
+              disabled={!waPhone.trim()}
+              onClick={() => {
+                openWhatsApp(waPhone.trim(), buildQuotationMessage(full));
+                setWaDialog(false);
+                if (full.status === "draft") statusMutation.mutate("sent");
+              }}>
+              <MessageCircle className="h-4 w-4" />
+              إرسال
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setWaDialog(false)}>إلغاء</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
