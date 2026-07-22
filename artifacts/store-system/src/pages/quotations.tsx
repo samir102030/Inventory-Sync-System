@@ -379,6 +379,11 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
     enabled: !!quotation.customerId,
   });
 
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["products"],
+    queryFn: () => fetchJSON(`${BASE}/products`),
+  });
+
   const statusMutation = useMutation({
     mutationFn: (status: string) => fetchJSON(`${BASE}/quotations/${quotation.id}/status`,
       { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }),

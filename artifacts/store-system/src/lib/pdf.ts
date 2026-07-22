@@ -1,18 +1,14 @@
-// @ts-ignore
-import html2pdfLib from "html2pdf.js";
-
 const pdfOpts = (filename: string) => ({
-  margin: [8, 8, 8, 8] as any,
+  margin: [8, 8, 8, 8],
   filename,
   image: { type: "jpeg", quality: 0.98 },
   html2canvas: { scale: 2, useCORS: true, logging: false },
   jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-} as any);
+});
 
-async function getLib() {
-  // dynamic import keeps the bundle lazy
-  const mod = await import("html2pdf.js" as any);
-  return (mod.default ?? mod) as any;
+async function getLib(): Promise<any> {
+  const mod = await import("html2pdf.js");
+  return (mod as any).default ?? mod;
 }
 
 export async function downloadPDF(element: HTMLElement, filename: string) {
