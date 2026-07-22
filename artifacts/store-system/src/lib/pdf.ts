@@ -1,18 +1,40 @@
-declare module "html2pdf.js" {
-  const html2pdf: any;
-  export default html2pdf;
+// @ts-ignore
+import html2pdfLib from "html2pdf.js";
+
+const pdfOpts = (filename: string) => ({
+  margin: [8, 8, 8, 8] as any,
+  filename,
+  image: { type: "jpeg", quality: 0.98 },
+  html2canvas: { scale: 2, useCORS: true, logging: false },
+  jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+} as any);
+
+async function getLib() {
+  // dynamic import keeps the bundle lazy
+  const mod = await import("html2pdf.js" as any);
+  return (mod.default ?? mod) as any;
 }
 
 export async function downloadPDF(element: HTMLElement, filename: string) {
-  const html2pdf = (await import("html2pdf.js")).default;
-  await html2pdf()
-    .set({
-      margin: [8, 8, 8, 8],
-      filename,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    })
-    .from(element)
-    .save();
+  const h = await getLib();
+  await h().set(pdfOpts(filename)).from(element).save();
+}
+
+export async function sharePDF(element: HTMLElement, filename: string): Promise<boolean> {
+  const h = await getLib();
+  const blob: Blob = await new Promise((resolve, reject) => {
+    h()
+      .set(pdfOpts(filename))
+      .from(element)
+      .toPdf()
+      .get("pdf")
+      .then((pdf: any) => resolve(new Blob([pdf.output("arraybuffer")], { type: "application/pdf" })))
+      .catch(reject);
+  });
+  const file = new File([blob], filename, { type: "application/pdf" });
+  if (navigator.canShare?.({ files: [file] })) {
+    await navigator.share({ files: [file], title: filename });
+    return true;
+  }
+  return false;
 }

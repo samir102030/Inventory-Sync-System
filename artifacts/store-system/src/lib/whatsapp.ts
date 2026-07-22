@@ -58,3 +58,33 @@ export function buildInvoiceMessage(invoice: {
 export function buildCustomMessage(customerName: string, message: string): string {
   return `السلام عليكم ${customerName} 👋\n\n${message}`;
 }
+
+export function buildQuotationMessage(q: {
+  quotationNumber: string;
+  customerName?: string | null;
+  total: number;
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  validUntil?: string | null;
+  items?: Array<{ productName: string; quantity: number; unitPrice: number }>;
+}): string {
+  let msg = `📋 *عرض سعر رقم: ${q.quotationNumber}*\n`;
+  if (q.customerName) msg += `👤 العميل: ${q.customerName}\n`;
+  msg += `📅 التاريخ: ${new Date().toLocaleDateString("ar-EG")}\n`;
+  if (q.validUntil)
+    msg += `⏰ صالح حتى: ${new Date(q.validUntil).toLocaleDateString("ar-EG")}\n`;
+  msg += `━━━━━━━━━━━━━━━\n`;
+  if (q.items?.length) {
+    for (const item of q.items)
+      msg += `• ${item.productName} × ${item.quantity} = ${(item.quantity * item.unitPrice).toFixed(2)} ج.م\n`;
+    msg += `━━━━━━━━━━━━━━━\n`;
+  }
+  if (Number(q.discount) > 0)
+    msg += `🏷️ خصم: -${Number(q.discount).toFixed(2)} ج.م\n`;
+  if (Number(q.tax) > 0)
+    msg += `📊 ضريبة: +${Number(q.tax).toFixed(2)} ج.م\n`;
+  msg += `\n💰 *الإجمالي: ${Number(q.total).toFixed(2)} ج.م*\n`;
+  msg += `\nنتطلع لتعاملكم معنا 🙏`;
+  return msg;
+}

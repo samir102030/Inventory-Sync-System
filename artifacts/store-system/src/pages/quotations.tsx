@@ -10,11 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Plus, Eye, Edit, Trash2, Printer, FileCheck, Download, Loader2 } from "lucide-react";
+import { Search, Plus, Eye, Edit, Trash2, Printer, FileCheck, Download, Loader2, Share2, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { exportToExcel } from "@/lib/excel";
-import { downloadPDF } from "@/lib/pdf";
+import { downloadPDF, sharePDF } from "@/lib/pdf";
+import { openWhatsApp, buildQuotationMessage } from "@/lib/whatsapp";
 
 const BASE = "/api";
 const fetchJSON = (url: string, opts?: RequestInit) =>
@@ -45,7 +46,7 @@ type Quotation = {
   items?: QItem[];
 };
 type Product = { id: number; name: string; barcode?: string | null; price: number; stock: number; costPrice?: number | null };
-type Customer = { id: number; name: string; phone?: string | null };
+type Customer = { id: number; name: string; phone?: string | null; whatsapp?: string | null };
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "مسودة", sent: "مُرسل", accepted: "مقبول", rejected: "مرفوض",
@@ -363,10 +364,19 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
   const queryClient = useQueryClient();
   const { data: settings } = useGetInvoiceSettings();
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [waDialog, setWaDialog] = useState(false);
+  const [waPhone, setWaPhone] = useState("");
 
   const { data: full, isLoading } = useQuery<Quotation>({
     queryKey: ["quotations", quotation.id],
     queryFn: () => fetchJSON(`${BASE}/quotations/${quotation.id}`),
+  });
+
+  const { data: customer } = useQuery<Customer>({
+    queryKey: ["customers", quotation.customerId],
+    queryFn: () => fetchJSON(`${BASE}/customers/${quotation.customerId}`),
+    enabled: !!quotation.customerId,
   });
 
   const statusMutation = useMutation({
@@ -501,21 +511,93 @@ function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation;
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => printQuotationA4(full, settings)} className="gap-1">
             <Printer className="h-4 w-4" />طباعة
           </Button>
-          <Button size="sm" disabled={pdfLoading} className="gap-1"
+          <Button variant="outline" size="sm" disabled={pdfLoading} className="gap-1"
             onClick={async () => {
               setPdfLoading(true);
               try { await downloadQuotationPDF(full, settings); }
               finally { setPdfLoading(false); }
             }}>
             {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {pdfLoading ? "جاري التحضير..." : "تحميل PDF"}
+            {pdfLoading ? "جاري التحضير..." : "PDF"}
+          </Button>
+          <Button size="sm" disabled={shareLoading} className="gap-1 bg-blue-600 hover:bg-blue-700"
+            onClick={async () => {
+              setShareLoading(true);
+              const filename = `عرض-سعر-${full.quotationNumber}.pdf`;
+              const container = document.createElement("div");
+              container.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:#fff;";
+              container.innerHTML = buildQuotationHTML(full, settings);
+              document.body.appendChild(container);
+              try {
+                const shared = await sharePDF(container, filename);
+                if (!shared) {
+                  await downloadQuotationPDF(full, settings);
+                  toast({ title: "تم تحضير PDF للإرسال", description: "المشاركة المباشرة غير مدعومة في هذا المتصفح، تم التحميل بدلاً منه" });
+                }
+              } catch {
+                toast({ title: "حدث خطأ أثناء المشاركة", variant: "destructive" });
+              } finally {
+                document.body.removeChild(container);
+                setShareLoading(false);
+              }
+            }}>
+            {shareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+            {shareLoading ? "جاري التحضير..." : "إرسال PDF"}
+          </Button>
+          <Button size="sm" variant="outline" className="gap-1 text-green-700 border-green-500 hover:bg-green-50"
+            onClick={() => {
+              setWaPhone(customer?.whatsapp || customer?.phone || "");
+              setWaDialog(true);
+            }}>
+            <MessageCircle className="h-4 w-4" />
+            واتساب
           </Button>
         </div>
       </div>
+
+      {/* WhatsApp Send Dialog */}
+      <Dialog open={waDialog} onOpenChange={setWaDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-green-600" />
+              إرسال عرض السعر عبر واتساب
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <Label>رقم الواتساب</Label>
+              <Input
+                dir="ltr"
+                placeholder="01xxxxxxxxx"
+                value={waPhone}
+                onChange={e => setWaPhone(e.target.value)}
+                className="text-left"
+              />
+              <p className="text-xs text-muted-foreground">اكتب الرقم بدون مسافات أو رموز</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setWaDialog(false)}>إلغاء</Button>
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 gap-1"
+                disabled={!waPhone.trim()}
+                onClick={() => {
+                  openWhatsApp(waPhone.trim(), buildQuotationMessage(full));
+                  setWaDialog(false);
+                  if (full.status === "draft") statusMutation.mutate("sent");
+                }}>
+                <MessageCircle className="h-4 w-4" />
+                إرسال
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
