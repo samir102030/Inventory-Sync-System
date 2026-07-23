@@ -797,6 +797,169 @@ paths:
               schema:
                 $ref: "#/components/schemas/BackupData"
 
+  /projects:
+    get:
+      operationId: getProjects
+      tags: [projects]
+      summary: List all projects with computed totals
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get project with invoices and expenses
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+
+  /projects/{id}/invoices/{invoiceId}:
+    post:
+      operationId: linkInvoiceToProject
+      tags: [projects]
+      summary: Link an invoice to a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Linked
+    delete:
+      operationId: unlinkInvoiceFromProject
+      tags: [projects]
+      summary: Unlink an invoice from a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Unlinked
+
+  /projects/{id}/expenses/{expenseId}:
+    post:
+      operationId: linkExpenseToProject
+      tags: [projects]
+      summary: Link an expense to a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: expenseId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Linked
+    delete:
+      operationId: unlinkExpenseFromProject
+      tags: [projects]
+      summary: Unlink an expense from a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: expenseId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Unlinked
+
   /settings/invoice:
     get:
       operationId: getInvoiceSettings
@@ -829,6 +992,105 @@ paths:
 
 components:
   schemas:
+    Project:
+      type: object
+      required: [id, name, status, installationCost, totalRevenue, totalExpenses, netProfit, invoiceCount, expenseCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, completed, cancelled]
+        installationCost:
+          type: number
+        startDate:
+          type: ["string", "null"]
+        endDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        totalRevenue:
+          type: number
+        totalExpenses:
+          type: number
+        netProfit:
+          type: number
+        invoiceCount:
+          type: number
+        expenseCount:
+          type: number
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ProjectDetail:
+      allOf:
+        - $ref: "#/components/schemas/Project"
+        - type: object
+          properties:
+            customerPhone:
+              type: ["string", "null"]
+            invoices:
+              type: array
+              items:
+                $ref: "#/components/schemas/Invoice"
+            expenses:
+              type: array
+              items:
+                $ref: "#/components/schemas/Expense"
+
+    ProjectInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        customerId:
+          type: integer
+        status:
+          type: string
+          enum: [active, completed, cancelled]
+        installationCost:
+          type: number
+        startDate:
+          type: string
+        endDate:
+          type: string
+        notes:
+          type: string
+
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        customerId:
+          type: integer
+        status:
+          type: string
+          enum: [active, completed, cancelled]
+        installationCost:
+          type: number
+        startDate:
+          type: string
+        endDate:
+          type: string
+        notes:
+          type: string
+
     HealthStatus:
       type: object
       properties:

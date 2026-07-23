@@ -34,6 +34,7 @@ import TaxableProducts from "@/pages/taxable-products";
 import Employees from "@/pages/employees";
 import Quotations from "@/pages/quotations";
 import StockShortage from "@/pages/stock-shortage";
+import Projects from "@/pages/projects";
 
 const queryClient = new QueryClient();
 
@@ -89,6 +90,7 @@ function Router() {
       <Route path="/employees"><ProtectedRoute component={Employees} /></Route>
       <Route path="/quotations"><ProtectedRoute component={Quotations} /></Route>
       <Route path="/stock-shortage"><ProtectedRoute component={StockShortage} /></Route>
+      <Route path="/projects"><ProtectedRoute component={Projects} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

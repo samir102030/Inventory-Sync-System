@@ -23,6 +23,7 @@ import {
   UserCheck,
   ClipboardList,
   AlertTriangle,
+  FolderOpen,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -76,6 +77,7 @@ const inventoryItems = [
   { title: "المستودعات", url: "/warehouses", icon: Warehouse },
   { title: "تتبع المنتج", url: "/product-tracking", icon: ScanBarcode },
   { title: "نواقص البضاعة", url: "/stock-shortage", icon: AlertTriangle },
+  { title: "المشاريع", url: "/projects", icon: FolderOpen },
 ];
 
 const crmItems = [

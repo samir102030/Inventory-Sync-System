@@ -19,6 +19,7 @@ import creditAccountsRouter from "./credit-accounts";
 import warehousesRouter from "./warehouses";
 import employeesRouter from "./employees";
 import quotationsRouter from "./quotations";
+import projectsRouter from "./projects";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(creditAccountsRouter);
 router.use(warehousesRouter);
 router.use(employeesRouter);
 router.use(quotationsRouter);
+router.use(projectsRouter);
 
 export default router;

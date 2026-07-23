@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, numeric, date, integer } from "drizzl
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { accountsTable } from "./accounts";
+import { projectsTable } from "./projects";
 
 export const expensesTable = pgTable("expenses", {
   id: serial("id").primaryKey(),
@@ -10,6 +11,7 @@ export const expensesTable = pgTable("expenses", {
   category: text("category").notNull().default("other"),
   date: date("date", { mode: "string" }).notNull(),
   accountId: integer("account_id").references(() => accountsTable.id),
+  projectId: integer("project_id").references(() => projectsTable.id),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
