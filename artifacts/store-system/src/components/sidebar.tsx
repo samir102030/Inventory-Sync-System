@@ -53,6 +53,7 @@ const salesItems = [
   { title: "نقطة البيع", url: "/pos", icon: ShoppingCart },
   { title: "الفواتير", url: "/invoices", icon: FileText },
   { title: "عروض الأسعار", url: "/quotations", icon: ClipboardList },
+  { title: "المشاريع", url: "/projects", icon: FolderOpen },
 ];
 
 const purchaseItems = [
@@ -77,7 +78,6 @@ const inventoryItems = [
   { title: "المستودعات", url: "/warehouses", icon: Warehouse },
   { title: "تتبع المنتج", url: "/product-tracking", icon: ScanBarcode },
   { title: "نواقص البضاعة", url: "/stock-shortage", icon: AlertTriangle },
-  { title: "المشاريع", url: "/projects", icon: FolderOpen },
 ];
 
 const crmItems = [
