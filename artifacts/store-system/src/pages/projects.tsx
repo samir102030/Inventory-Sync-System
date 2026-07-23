@@ -213,22 +213,34 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [linkTab, setLinkTab] = useState<"invoices" | "quotations" | "expenses" | null>(null);
+  const [invFilter, setInvFilter] = useState<"customer" | "all">("customer");
+  const [quotFilter, setQuotFilter] = useState<"customer" | "all">("customer");
 
   const { data: detail, isLoading } = useQuery<ProjectDetail>({
     queryKey: ["project", summary.id],
     queryFn: () => fetchJSON(`${BASE}/projects/${summary.id}`),
   });
 
-  // customer-filtered lists for the link pickers
+  // customer-filtered lists
   const { data: custInvoices = [] } = useQuery<Invoice[]>({
     queryKey: ["project-cust-invoices", summary.id],
     queryFn: () => fetchJSON(`${BASE}/projects/${summary.id}/customer-invoices`),
     enabled: linkTab === "invoices",
   });
+  const { data: allInvoices = [] } = useQuery<Invoice[]>({
+    queryKey: ["invoices-all"],
+    queryFn: () => fetchJSON(`${BASE}/invoices`),
+    enabled: linkTab === "invoices" && invFilter === "all",
+  });
   const { data: custQuotations = [] } = useQuery<Quotation[]>({
     queryKey: ["project-cust-quotations", summary.id],
     queryFn: () => fetchJSON(`${BASE}/projects/${summary.id}/customer-quotations`),
     enabled: linkTab === "quotations",
+  });
+  const { data: allQuotations = [] } = useQuery<Quotation[]>({
+    queryKey: ["quotations-all"],
+    queryFn: () => fetchJSON(`${BASE}/quotations`),
+    enabled: linkTab === "quotations" && quotFilter === "all",
   });
   const { data: allExpenses = [] } = useQuery<Expense[]>({
     queryKey: ["expenses-all"],
@@ -335,39 +347,48 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
 
         {/* ── Invoices tab ── */}
         <TabsContent value="invoices" className="space-y-2">
-          <div className="flex justify-between items-center">
-            <p className="text-xs text-gray-400">
-              {detail.customerId ? "مفلترة بفواتير العميل" : "لا يوجد عميل محدد للمشروع"}
-            </p>
+          <div className="flex justify-between items-center gap-2">
             <Button size="sm" variant="outline" className="h-7 gap-1 text-xs"
               onClick={() => setLinkTab(linkTab === "invoices" ? null : "invoices")}>
-              <Link2 className="h-3 w-3" />{linkTab === "invoices" ? "إخفاء" : "إضافة فاتورة"}
+              <Link2 className="h-3 w-3" />{linkTab === "invoices" ? "إخفاء القائمة" : "إضافة فاتورة"}
             </Button>
           </div>
 
           {linkTab === "invoices" && (
             <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
-              {!detail.customerId ? (
-                <div className="flex items-center gap-2 text-amber-700 text-sm bg-amber-50 border border-amber-200 rounded p-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  حدد عميلاً للمشروع أولاً لتتمكن من ربط فواتيره
-                </div>
-              ) : (
-                <LinkPicker
-                  title="فواتير العميل"
-                  items={custInvoices}
-                  linkedIds={linkedInvIds}
-                  onLink={id => invLink.mutate({ id, link: true })}
-                  onUnlink={id => invLink.mutate({ id, link: false })}
-                  headers={["رقم الفاتورة", "الإجمالي", "التاريخ"]}
-                  emptyMsg="لا توجد فواتير لهذا العميل"
-                  renderRow={(inv, linked) => <>
-                    <TableCell className="font-mono text-sm font-medium">{inv.invoiceNumber}</TableCell>
-                    <TableCell className="text-green-700 font-medium">{cur(inv.total)}</TableCell>
-                    <TableCell className="text-gray-500 text-xs">{fmtDate(inv.createdAt)}</TableCell>
-                  </>}
-                />
-              )}
+              {/* filter toggle */}
+              <div className="flex gap-1 bg-white border rounded-md p-0.5 w-fit">
+                <button
+                  className={`text-xs px-3 py-1 rounded transition-colors ${invFilter === "customer" ? "bg-blue-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                  onClick={() => setInvFilter("customer")}
+                  disabled={!detail.customerId}
+                  title={!detail.customerId ? "لا يوجد عميل محدد" : ""}
+                >
+                  فواتير العميل
+                </button>
+                <button
+                  className={`text-xs px-3 py-1 rounded transition-colors ${invFilter === "all" ? "bg-blue-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                  onClick={() => setInvFilter("all")}
+                >
+                  كل الفواتير
+                </button>
+              </div>
+
+              <LinkPicker
+                title="الفواتير"
+                items={invFilter === "all" ? allInvoices : custInvoices}
+                linkedIds={linkedInvIds}
+                onLink={id => invLink.mutate({ id, link: true })}
+                onUnlink={id => invLink.mutate({ id, link: false })}
+                headers={["رقم الفاتورة", "العميل", "الإجمالي", "التاريخ"]}
+                emptyMsg={invFilter === "customer" && !detail.customerId ? "حدد عميلاً للمشروع أولاً" : "لا توجد فواتير"}
+                renderRow={(inv: any) => <>
+                  <TableCell className="font-mono text-sm font-medium">{inv.invoiceNumber}</TableCell>
+                  <TableCell className="text-gray-600 text-xs">{inv.customerName ?? "—"}</TableCell>
+                  <TableCell className="text-green-700 font-medium">{cur(Number(inv.total))}</TableCell>
+                  <TableCell className="text-gray-500 text-xs">{fmtDate(inv.createdAt)}</TableCell>
+                </>}
+              />
             </div>
           )}
 
@@ -401,40 +422,49 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
 
         {/* ── Quotations tab ── */}
         <TabsContent value="quotations" className="space-y-2">
-          <div className="flex justify-between items-center">
-            <p className="text-xs text-gray-400">
-              {detail.customerId ? "مفلترة بعروض أسعار العميل" : "لا يوجد عميل محدد للمشروع"}
-            </p>
+          <div className="flex justify-between items-center gap-2">
             <Button size="sm" variant="outline" className="h-7 gap-1 text-xs"
               onClick={() => setLinkTab(linkTab === "quotations" ? null : "quotations")}>
-              <Link2 className="h-3 w-3" />{linkTab === "quotations" ? "إخفاء" : "إضافة عرض"}
+              <Link2 className="h-3 w-3" />{linkTab === "quotations" ? "إخفاء القائمة" : "إضافة عرض"}
             </Button>
           </div>
 
           {linkTab === "quotations" && (
             <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
-              {!detail.customerId ? (
-                <div className="flex items-center gap-2 text-amber-700 text-sm bg-amber-50 border border-amber-200 rounded p-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  حدد عميلاً للمشروع أولاً لتتمكن من ربط عروض أسعاره
-                </div>
-              ) : (
-                <LinkPicker
-                  title="عروض أسعار العميل"
-                  items={custQuotations}
-                  linkedIds={linkedQuotIds}
-                  onLink={id => quotLink.mutate({ id, link: true })}
-                  onUnlink={id => quotLink.mutate({ id, link: false })}
-                  headers={["رقم العرض", "الإجمالي", "الحالة", "التاريخ"]}
-                  emptyMsg="لا توجد عروض أسعار لهذا العميل"
-                  renderRow={(q, linked) => <>
-                    <TableCell className="font-mono font-medium text-sm">{q.quotationNumber}</TableCell>
-                    <TableCell className="text-violet-700 font-medium">{cur(q.total)}</TableCell>
-                    <TableCell className="text-xs">{QUOT_STATUS[q.status] ?? q.status}</TableCell>
-                    <TableCell className="text-gray-500 text-xs">{fmtDate(q.createdAt)}</TableCell>
-                  </>}
-                />
-              )}
+              {/* filter toggle */}
+              <div className="flex gap-1 bg-white border rounded-md p-0.5 w-fit">
+                <button
+                  className={`text-xs px-3 py-1 rounded transition-colors ${quotFilter === "customer" ? "bg-violet-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                  onClick={() => setQuotFilter("customer")}
+                  disabled={!detail.customerId}
+                  title={!detail.customerId ? "لا يوجد عميل محدد" : ""}
+                >
+                  عروض العميل
+                </button>
+                <button
+                  className={`text-xs px-3 py-1 rounded transition-colors ${quotFilter === "all" ? "bg-violet-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                  onClick={() => setQuotFilter("all")}
+                >
+                  كل العروض
+                </button>
+              </div>
+
+              <LinkPicker
+                title="عروض الأسعار"
+                items={quotFilter === "all" ? allQuotations : custQuotations}
+                linkedIds={linkedQuotIds}
+                onLink={id => quotLink.mutate({ id, link: true })}
+                onUnlink={id => quotLink.mutate({ id, link: false })}
+                headers={["رقم العرض", "العميل", "الإجمالي", "الحالة", "التاريخ"]}
+                emptyMsg={quotFilter === "customer" && !detail.customerId ? "حدد عميلاً للمشروع أولاً" : "لا توجد عروض أسعار"}
+                renderRow={(q: any) => <>
+                  <TableCell className="font-mono font-medium text-sm">{q.quotationNumber}</TableCell>
+                  <TableCell className="text-gray-600 text-xs">{q.customerName ?? "—"}</TableCell>
+                  <TableCell className="text-violet-700 font-medium">{cur(Number(q.total))}</TableCell>
+                  <TableCell className="text-xs">{QUOT_STATUS[q.status] ?? q.status}</TableCell>
+                  <TableCell className="text-gray-500 text-xs">{fmtDate(q.createdAt)}</TableCell>
+                </>}
+              />
             </div>
           )}
 
