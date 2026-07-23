@@ -10,6 +10,7 @@ export const projectsTable = pgTable("projects", {
   customerId: integer("customer_id").references(() => customersTable.id),
   status: text("status").notNull().default("active"), // active | completed | cancelled
   installationCost: numeric("installation_cost", { precision: 12, scale: 2 }).notNull().default("0"),
+  maintenanceCost: numeric("maintenance_cost", { precision: 12, scale: 2 }).notNull().default("0"),
   startDate: text("start_date"),
   endDate: text("end_date"),
   notes: text("notes"),
