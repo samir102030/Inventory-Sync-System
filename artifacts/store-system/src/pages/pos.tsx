@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useGetProducts, useGetCustomers, useCreateInvoice, useGetCategories, getGetProductsQueryKey, getGetSummaryQueryKey } from "@workspace/api-client-react";
+import { useGetProducts, useGetCustomers, useCreateInvoice, useGetCategories, useGetInvoiceSettings, getGetProductsQueryKey, getGetSummaryQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,11 +7,88 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle, Wallet, Receipt } from "lucide-react";
+import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle, Wallet, Receipt, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
 import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
+
+function escapeHtml(v: unknown): string {
+  return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+const PAYMENT_LABELS: Record<string, string> = { cash: "نقداً", card: "بطاقة", transfer: "تحويل", credit: "آجل" };
+
+function printPOSReceipt(invoice: CreatedInvoice, settings: any) {
+  const companyName = escapeHtml(settings?.companyName || "شركتي");
+  const companyPhone = escapeHtml(settings?.companyPhone || "");
+  const companyAddress = escapeHtml(settings?.companyAddress || "");
+  const footerNote = escapeHtml(settings?.footerNote || "");
+  const primaryColor = settings?.primaryColor || "#1e40af";
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ar-EG");
+  const timeStr = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+
+  const itemLines = (invoice.items || []).map(item => `
+    <div class="item-name">${escapeHtml(item.productName)}</div>
+    <div class="item-row">
+      <span>${item.quantity} × ${Number(item.unitPrice).toFixed(2)} ج.م</span>
+      <span>${(item.quantity * item.unitPrice).toFixed(2)} ج.م</span>
+    </div>`).join('<div class="sep-thin"></div>');
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8"/>
+<title>فاتورة #${escapeHtml(invoice.invoiceNumber)}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  @page { margin: 4mm 3mm; }
+  body { font-family: Arial, 'Segoe UI', sans-serif; font-size:15px; line-height:1.6; color:#000; background:#fff; direction:rtl; width:100%; }
+  .center { text-align:center; }
+  .bold { font-weight:bold; }
+  .company-name { font-size:20px; font-weight:bold; color:${primaryColor}; text-align:center; margin-bottom:2px; }
+  .sep { border-top:2px dashed #000; margin:8px 0; }
+  .sep-thin { border-top:1px dotted #aaa; margin:4px 0; }
+  .meta-row { display:flex; justify-content:space-between; font-size:13px; padding:2px 0; }
+  .item-name { font-weight:bold; margin-top:6px; font-size:14px; }
+  .item-row { display:flex; justify-content:space-between; font-size:13px; color:#333; margin-bottom:2px; }
+  .total-row { display:flex; justify-content:space-between; padding:3px 0; font-size:14px; }
+  .total-final { display:flex; justify-content:space-between; font-size:20px; font-weight:bold; padding:7px 0; border-top:3px solid ${primaryColor}; margin-top:6px; color:${primaryColor}; }
+  .footer { text-align:center; font-size:12px; margin-top:10px; color:#555; }
+  @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+</style>
+</head>
+<body>
+  <div class="company-name">${companyName}</div>
+  ${companyPhone ? `<div class="center" style="font-size:13px;">${companyPhone}</div>` : ""}
+  ${companyAddress ? `<div class="center" style="font-size:12px;color:#555;">${companyAddress}</div>` : ""}
+  <div class="sep"></div>
+
+  <div class="meta-row"><span>فاتورة #</span><span class="bold">${escapeHtml(invoice.invoiceNumber)}</span></div>
+  <div class="meta-row"><span>التاريخ</span><span>${dateStr} ${timeStr}</span></div>
+  <div class="meta-row"><span>العميل</span><span>${escapeHtml(invoice.customerName || "نقدي")}</span></div>
+  <div class="meta-row"><span>الدفع</span><span>${PAYMENT_LABELS[invoice.paymentMethod] || invoice.paymentMethod}</span></div>
+  <div class="sep"></div>
+
+  ${itemLines}
+
+  <div class="sep"></div>
+  <div class="total-row"><span>المجموع الفرعي</span><span>${Number(invoice.subtotal || 0).toFixed(2)} ج.م</span></div>
+  ${Number(invoice.discount) > 0 ? `<div class="total-row" style="color:#dc2626;"><span>الخصم</span><span>-${Number(invoice.discount).toFixed(2)} ج.م</span></div>` : ""}
+  ${Number(invoice.tax) > 0 ? `<div class="total-row"><span>الضريبة</span><span>+${Number(invoice.tax).toFixed(2)} ج.م</span></div>` : ""}
+  <div class="total-final"><span>الإجمالي</span><span>${Number(invoice.total).toFixed(2)} ج.م</span></div>
+
+  <div class="sep"></div>
+  <div class="footer">${footerNote || `شكراً لتعاملكم مع ${companyName}`}</div>
+  <div style="margin-top:20px;"></div>
+<script>window.onload = function(){ window.print(); };<\/script>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=360,height=650");
+  if (win) { win.document.write(html); win.document.close(); }
+}
 
 type CartItem = Product & { cartQuantity: number; discount: number; unitPrice: number };
 type CreatedInvoice = { invoiceNumber: string; total: number; subtotal: number; discount: number; tax: number; paymentMethod: string; customerName?: string | null; customerWhatsapp?: string | null; items?: Array<{ productName: string; quantity: number; unitPrice: number }> };
@@ -29,6 +106,7 @@ export default function POS() {
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(0);
   const [successInvoice, setSuccessInvoice] = useState<CreatedInvoice | null>(null);
+  const { data: invoiceSettings } = useGetInvoiceSettings();
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const barcodeBuffer = useRef("");
@@ -402,53 +480,107 @@ export default function POS() {
       </Card>
     </div>
 
-    {/* Success + WhatsApp Dialog */}
+    {/* Receipt Dialog */}
     <Dialog open={!!successInvoice} onOpenChange={open => !open && setSuccessInvoice(null)}>
-      <DialogContent dir="rtl" className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-green-600">
+      <DialogContent dir="rtl" className="max-w-sm p-0 gap-0 overflow-hidden">
+        <DialogHeader className="bg-green-50 border-b px-4 py-3">
+          <DialogTitle className="flex items-center gap-2 text-green-700">
             <CheckCircle className="h-5 w-5" />
-            تم إصدار الفاتورة
+            تم إصدار الفاتورة بنجاح
           </DialogTitle>
-          <DialogDescription>الفاتورة جاهزة — يمكنك إرسالها على واتساب مباشرة</DialogDescription>
+          <DialogDescription className="text-green-600 text-xs">اضغط طباعة للحصول على نسخة ورقية</DialogDescription>
         </DialogHeader>
-        {successInvoice && (
-          <div className="space-y-4">
-            <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
-              <div className="flex justify-between font-bold text-base">
-                <span>رقم الفاتورة:</span>
-                <span className="font-mono">{successInvoice.invoiceNumber}</span>
-              </div>
-              {successInvoice.customerName && (
-                <div className="flex justify-between"><span className="text-muted-foreground">العميل:</span><span>{successInvoice.customerName}</span></div>
-              )}
-              <div className="flex justify-between font-bold text-green-700 text-base border-t pt-2">
-                <span>الإجمالي:</span>
-                <span>{Number(successInvoice.total).toFixed(2)} ج.م</span>
-              </div>
-            </div>
 
-            <div className="grid gap-2">
-              {successInvoice.customerWhatsapp ? (
-                <Button
-                  className="w-full bg-green-600 hover:bg-green-700 gap-2"
-                  onClick={() => {
-                    openWhatsApp(successInvoice.customerWhatsapp!, buildInvoiceMessage(successInvoice));
-                  }}
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  إرسال الفاتورة على واتساب
-                </Button>
-              ) : (
-                <div className="text-sm text-muted-foreground text-center bg-muted/50 rounded p-2">
-                  لا يوجد رقم واتساب للعميل
+        {successInvoice && (
+          <>
+            {/* Receipt preview */}
+            <div className="px-4 py-3 space-y-3 max-h-[60vh] overflow-y-auto text-sm">
+              {/* Company */}
+              {(invoiceSettings as any)?.companyName && (
+                <div className="text-center">
+                  <p className="font-bold text-base" style={{ color: (invoiceSettings as any)?.primaryColor || "#1e40af" }}>
+                    {(invoiceSettings as any).companyName}
+                  </p>
+                  {(invoiceSettings as any)?.companyPhone && (
+                    <p className="text-xs text-muted-foreground">{(invoiceSettings as any).companyPhone}</p>
+                  )}
                 </div>
               )}
-              <Button variant="outline" className="w-full" onClick={() => setSuccessInvoice(null)}>
-                إغلاق
-              </Button>
+
+              <div className="border-t border-dashed pt-2 space-y-1">
+                <div className="flex justify-between"><span className="text-muted-foreground">رقم الفاتورة</span><span className="font-mono font-bold">{successInvoice.invoiceNumber}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">التاريخ</span><span>{new Date().toLocaleDateString("ar-EG")}</span></div>
+                {successInvoice.customerName && <div className="flex justify-between"><span className="text-muted-foreground">العميل</span><span>{successInvoice.customerName}</span></div>}
+                <div className="flex justify-between"><span className="text-muted-foreground">طريقة الدفع</span><span>{PAYMENT_LABELS[successInvoice.paymentMethod] || successInvoice.paymentMethod}</span></div>
+              </div>
+
+              {/* Items */}
+              <div className="border-t border-dashed pt-2 space-y-1.5">
+                {successInvoice.items?.map((item, i) => (
+                  <div key={i}>
+                    <p className="font-medium text-xs">{item.productName}</p>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{item.quantity} × {Number(item.unitPrice).toFixed(2)} ج.م</span>
+                      <span className="font-medium text-foreground">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-dashed pt-2 space-y-1">
+                {Number(successInvoice.subtotal) !== Number(successInvoice.total) && (
+                  <div className="flex justify-between text-xs text-muted-foreground"><span>المجموع الفرعي</span><span>{Number(successInvoice.subtotal).toFixed(2)} ج.م</span></div>
+                )}
+                {Number(successInvoice.discount) > 0 && (
+                  <div className="flex justify-between text-xs text-red-600"><span>الخصم</span><span>-{Number(successInvoice.discount).toFixed(2)} ج.م</span></div>
+                )}
+                {Number(successInvoice.tax) > 0 && (
+                  <div className="flex justify-between text-xs"><span>الضريبة</span><span>+{Number(successInvoice.tax).toFixed(2)} ج.م</span></div>
+                )}
+                <div className="flex justify-between font-bold text-base border-t pt-1.5" style={{ color: (invoiceSettings as any)?.primaryColor || "#1e40af" }}>
+                  <span>الإجمالي</span>
+                  <span>{Number(successInvoice.total).toFixed(2)} ج.م</span>
+                </div>
+              </div>
+
+              {(invoiceSettings as any)?.footerNote && (
+                <p className="text-center text-xs text-muted-foreground border-t border-dashed pt-2">
+                  {(invoiceSettings as any).footerNote}
+                </p>
+              )}
             </div>
-          </div>
+
+            {/* Actions */}
+            <div className="border-t px-4 py-3 grid grid-cols-2 gap-2">
+              <Button
+                className="gap-1.5"
+                onClick={() => printPOSReceipt(successInvoice, invoiceSettings)}
+              >
+                <Printer className="h-4 w-4" />
+                طباعة
+              </Button>
+              {successInvoice.customerWhatsapp ? (
+                <Button
+                  variant="outline"
+                  className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50"
+                  onClick={() => openWhatsApp(successInvoice.customerWhatsapp!, buildInvoiceMessage(successInvoice))}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  واتساب
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => setSuccessInvoice(null)}>
+                  إغلاق
+                </Button>
+              )}
+              {successInvoice.customerWhatsapp && (
+                <Button variant="ghost" className="col-span-2 text-muted-foreground text-xs h-7" onClick={() => setSuccessInvoice(null)}>
+                  إغلاق
+                </Button>
+              )}
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
