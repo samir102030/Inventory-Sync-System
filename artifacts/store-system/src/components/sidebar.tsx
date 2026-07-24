@@ -73,8 +73,6 @@ const financeItems = [
   { title: "إيجار الممتلكات", url: "/rental-properties", icon: Building2 },
   { title: "الجمعيات", url: "/jam3iyyat", icon: Coins },
   { title: "الموظفون والرواتب", url: "/employees", icon: UserCheck },
-  { title: "سجل الضريبة", url: "/tax-ledger", icon: Receipt },
-  { title: "المنتجات الضريبية", url: "/taxable-products", icon: Receipt },
 ];
 
 const inventoryItems = [
@@ -83,6 +81,9 @@ const inventoryItems = [
   { title: "المستودعات", url: "/warehouses", icon: Warehouse },
   { title: "تتبع المنتج", url: "/product-tracking", icon: ScanBarcode },
   { title: "نواقص البضاعة", url: "/stock-shortage", icon: AlertTriangle },
+  { title: "المنتجات الضريبية", url: "/taxable-products", icon: Receipt },
+  { title: "سجل الضريبة", url: "/tax-ledger", icon: Receipt },
+  { title: "الفواتير الضريبية", url: "/tax-invoices", icon: FileText },
 ];
 
 const crmItems = [
