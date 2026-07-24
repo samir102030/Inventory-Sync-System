@@ -1,41 +1,135 @@
 import { Router } from "express";
-import { db, productsTable, customersTable, invoicesTable, invoiceItemsTable, expensesTable, licensesTable, categoriesTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db } from "@workspace/db";
+import {
+  productsTable, categoriesTable, customersTable, suppliersTable,
+  invoicesTable, invoiceItemsTable, invoiceReturnsTable, invoiceReturnItemsTable,
+  expensesTable, licensesTable, quotationsTable, quotationItemsTable,
+  purchasesTable, purchaseItemsTable, accountsTable, accountTransactionsTable,
+  receiptVouchersTable, paymentVouchersTable, employeesTable, salaryPaymentsTable,
+  warehousesTable, warehouseStockTable, warehouseTransfersTable, warehouseTransferItemsTable,
+  projectsTable, usersTable, invoiceSettingsTable,
+} from "@workspace/db";
+import { sql } from "drizzle-orm";
 
 const router = Router();
 
+/* ─── FULL BACKUP ─── */
 router.get("/backup/export", async (_req, res) => {
-  const products = await db
-    .select({ id: productsTable.id, name: productsTable.name, description: productsTable.description, price: productsTable.price, costPrice: productsTable.costPrice, categoryId: productsTable.categoryId, categoryName: categoriesTable.name, stock: productsTable.stock, minStock: productsTable.minStock, barcode: productsTable.barcode, unit: productsTable.unit, createdAt: productsTable.createdAt })
-    .from(productsTable).leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id));
+  const [
+    products, categories, customers, suppliers,
+    invoices, invoiceItems, invoiceReturns, invoiceReturnItems,
+    expenses, licenses, quotations, quotationItems,
+    purchases, purchaseItems, accounts, accountTransactions,
+    receiptVouchers, paymentVouchers, employees, salaryPayments,
+    warehouses, warehouseStock, warehouseTransfers, warehouseTransferItems,
+    projects, users, invoiceSettings,
+  ] = await Promise.all([
+    db.select().from(productsTable),
+    db.select().from(categoriesTable),
+    db.select().from(customersTable),
+    db.select().from(suppliersTable),
+    db.select().from(invoicesTable),
+    db.select().from(invoiceItemsTable),
+    db.select().from(invoiceReturnsTable),
+    db.select().from(invoiceReturnItemsTable),
+    db.select().from(expensesTable),
+    db.select().from(licensesTable),
+    db.select().from(quotationsTable),
+    db.select().from(quotationItemsTable),
+    db.select().from(purchasesTable),
+    db.select().from(purchaseItemsTable),
+    db.select().from(accountsTable),
+    db.select().from(accountTransactionsTable),
+    db.select().from(receiptVouchersTable),
+    db.select().from(paymentVouchersTable),
+    db.select().from(employeesTable),
+    db.select().from(salaryPaymentsTable),
+    db.select().from(warehousesTable),
+    db.select().from(warehouseStockTable),
+    db.select().from(warehouseTransfersTable),
+    db.select().from(warehouseTransferItemsTable),
+    db.select().from(projectsTable),
+    db.select({ id: usersTable.id, username: usersTable.username, name: usersTable.name, role: usersTable.role, status: usersTable.status, email: usersTable.email, phone: usersTable.phone, createdAt: usersTable.createdAt }).from(usersTable),
+    db.select().from(invoiceSettingsTable),
+  ]);
 
-  const customers = await db.select().from(customersTable);
-
-  const invoices = await db
-    .select({ id: invoicesTable.id, invoiceNumber: invoicesTable.invoiceNumber, customerId: invoicesTable.customerId, customerName: customersTable.name, subtotal: invoicesTable.subtotal, discount: invoicesTable.discount, tax: invoicesTable.tax, total: invoicesTable.total, paymentMethod: invoicesTable.paymentMethod, status: invoicesTable.status, notes: invoicesTable.notes, createdBy: invoicesTable.createdBy, createdAt: invoicesTable.createdAt })
-    .from(invoicesTable).leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id));
-
-  const invoiceDetails = await Promise.all(invoices.map(async inv => {
-    const items = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
-    return {
-      ...inv,
-      subtotal: Number(inv.subtotal), discount: Number(inv.discount), tax: Number(inv.tax), total: Number(inv.total),
-      createdAt: inv.createdAt.toISOString(),
-      items: items.map(i => ({ id: i.id, productId: i.productId, productName: i.productName, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice), discount: Number(i.discount), total: Number(i.total) })),
-    };
-  }));
-
-  const expenses = await db.select().from(expensesTable);
-  const licenses = await db.select().from(licensesTable);
+  const serialize = (rows: any[]) =>
+    rows.map(r => {
+      const out: any = {};
+      for (const [k, v] of Object.entries(r)) {
+        if (v instanceof Date) out[k] = v.toISOString();
+        else out[k] = v;
+      }
+      return out;
+    });
 
   return res.json({
+    version: 2,
     exportedAt: new Date().toISOString(),
-    products: products.map(p => ({ ...p, price: Number(p.price), costPrice: p.costPrice != null ? Number(p.costPrice) : null, createdAt: p.createdAt.toISOString() })),
-    customers: customers.map(c => ({ ...c, totalPurchases: null, createdAt: c.createdAt.toISOString() })),
-    invoices: invoiceDetails,
-    expenses: expenses.map(e => ({ ...e, amount: Number(e.amount), createdAt: e.createdAt.toISOString() })),
-    licenses: licenses.map(l => ({ ...l, cost: l.cost != null ? Number(l.cost) : null, createdAt: l.createdAt.toISOString() })),
+    products: serialize(products),
+    categories: serialize(categories),
+    customers: serialize(customers),
+    suppliers: serialize(suppliers),
+    invoices: serialize(invoices),
+    invoiceItems: serialize(invoiceItems),
+    invoiceReturns: serialize(invoiceReturns),
+    invoiceReturnItems: serialize(invoiceReturnItems),
+    expenses: serialize(expenses),
+    licenses: serialize(licenses),
+    quotations: serialize(quotations),
+    quotationItems: serialize(quotationItems),
+    purchases: serialize(purchases),
+    purchaseItems: serialize(purchaseItems),
+    accounts: serialize(accounts),
+    accountTransactions: serialize(accountTransactions),
+    receiptVouchers: serialize(receiptVouchers),
+    paymentVouchers: serialize(paymentVouchers),
+    employees: serialize(employees),
+    salaryPayments: serialize(salaryPayments),
+    warehouses: serialize(warehouses),
+    warehouseStock: serialize(warehouseStock),
+    warehouseTransfers: serialize(warehouseTransfers),
+    warehouseTransferItems: serialize(warehouseTransferItems),
+    projects: serialize(projects),
+    users: serialize(users),
+    invoiceSettings: serialize(invoiceSettings),
   });
+});
+
+/* ─── FULL RESET ─── */
+router.post("/backup/reset", async (_req, res) => {
+  // Delete in FK-safe order (children first)
+  await db.execute(sql`
+    TRUNCATE TABLE
+      warehouse_transfer_items,
+      warehouse_transfers,
+      warehouse_stock,
+      warehouses,
+      invoice_return_items,
+      invoice_returns,
+      invoice_items,
+      invoices,
+      quotation_items,
+      quotations,
+      purchase_items,
+      purchases,
+      account_transactions,
+      receipt_vouchers,
+      payment_vouchers,
+      salary_payments,
+      employees,
+      expenses,
+      licenses,
+      projects,
+      products,
+      categories,
+      customers,
+      suppliers,
+      accounts
+    RESTART IDENTITY CASCADE
+  `);
+
+  return res.json({ ok: true });
 });
 
 export default router;

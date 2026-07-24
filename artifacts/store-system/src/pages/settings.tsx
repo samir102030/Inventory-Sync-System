@@ -19,7 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Check, X, Upload, Trash } from "lucide-react";
+import { Plus, Edit, Trash2, Check, X, Upload, Trash, Download, AlertTriangle, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { User, UserInputRole } from "@workspace/api-client-react/src/generated/api.schemas";
 
@@ -439,6 +439,152 @@ export default function Settings() {
       </Card>
 
       {user?.role === 'admin' && <UsersManagement />}
+      {user?.role === 'admin' && <BackupResetSection />}
     </div>
+  );
+}
+
+function BackupResetSection() {
+  const { toast } = useToast();
+  const [confirmText, setConfirmText] = useState("");
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const handleBackup = async () => {
+    try {
+      const res = await fetch("/api/backup/export", { credentials: "include" });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `backup-${date}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "تم تنزيل النسخة الاحتياطية بنجاح" });
+    } catch {
+      toast({ title: "فشل تنزيل النسخة الاحتياطية", variant: "destructive" });
+    }
+  };
+
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      const res = await fetch("/api/backup/reset", { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error();
+      toast({ title: "تم إعادة ضبط النظام — سيتم تحديث الصفحة" });
+      setTimeout(() => window.location.reload(), 1500);
+    } catch {
+      toast({ title: "فشلت إعادة الضبط", variant: "destructive" });
+    } finally {
+      setResetting(false);
+      setShowResetDialog(false);
+      setConfirmText("");
+    }
+  };
+
+  return (
+    <>
+      <Card className="border-destructive/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Download className="h-5 w-5" />
+            النسخ الاحتياطي وإعادة الضبط
+          </CardTitle>
+          <CardDescription>نسّخ بياناتك أو امسح كل شيء وابدأ من جديد</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Backup */}
+          <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-muted/50 border">
+            <div>
+              <p className="font-medium">تنزيل نسخة احتياطية كاملة</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                ملف JSON يحتوي على جميع البيانات — منتجات، فواتير، عملاء، مصروفات، مشاريع، وأكثر
+              </p>
+            </div>
+            <Button variant="outline" className="shrink-0 gap-2" onClick={handleBackup}>
+              <Download className="h-4 w-4" />
+              تنزيل Backup
+            </Button>
+          </div>
+
+          {/* Reset */}
+          <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+            <div>
+              <p className="font-medium text-destructive flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4" />
+                إعادة ضبط النظام بالكامل
+              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                يمسح كل البيانات نهائياً — منتجات، فواتير، عملاء، مخزون، مشاريع، إلخ.
+                لا يمكن التراجع عن هذا الإجراء.
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              className="shrink-0 gap-2"
+              onClick={() => setShowResetDialog(true)}
+            >
+              <RotateCcw className="h-4 w-4" />
+              إعادة الضبط
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Reset Confirmation Dialog */}
+      <Dialog open={showResetDialog} onOpenChange={open => { setShowResetDialog(open); setConfirmText(""); }}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              تأكيد إعادة الضبط الكامل
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-sm space-y-1.5">
+              <p className="font-semibold text-destructive">سيتم حذف الآتي نهائياً:</p>
+              <ul className="text-muted-foreground space-y-0.5 list-disc list-inside">
+                <li>جميع المنتجات والفئات</li>
+                <li>جميع الفواتير وعروض الأسعار</li>
+                <li>جميع العملاء والموردين</li>
+                <li>جميع المصروفات والمشتريات</li>
+                <li>جميع الحسابات والسندات</li>
+                <li>جميع المشاريع والمستودعات</li>
+                <li>جميع الموظفين والرواتب</li>
+              </ul>
+              <p className="font-medium mt-2">تبقى: حسابات المستخدمين وإعدادات الفاتورة</p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                اكتب <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-destructive">إعادة ضبط</span> للتأكيد:
+              </p>
+              <input
+                className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
+                placeholder="اكتب: إعادة ضبط"
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                className="flex-1 gap-2"
+                disabled={confirmText !== "إعادة ضبط" || resetting}
+                onClick={handleReset}
+              >
+                <RotateCcw className="h-4 w-4" />
+                {resetting ? "جارٍ المسح..." : "تأكيد إعادة الضبط"}
+              </Button>
+              <Button variant="outline" onClick={() => { setShowResetDialog(false); setConfirmText(""); }}>
+                إلغاء
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
