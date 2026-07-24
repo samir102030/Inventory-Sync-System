@@ -1,9 +1,11 @@
 import { useGetSummary } from "@workspace/api-client-react";
+import { useRole } from "@/hooks/use-role";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, Package, Users, AlertTriangle, Key, TrendingDown, TrendingUp } from "lucide-react";
 
 export default function Dashboard() {
   const { data: summary, isLoading } = useGetSummary();
+  const { isAdmin } = useRole();
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-full">جاري التحميل...</div>;
@@ -75,12 +77,14 @@ export default function Dashboard() {
               <span className="text-sm text-muted-foreground">إجمالي المشتريات</span>
               <span className="font-bold text-blue-600">{monthPurchases.toFixed(2)} ج.م</span>
             </div>
-            <div className="flex items-center justify-between py-2 border-b">
-              <span className="text-sm text-muted-foreground">هامش الربح</span>
-              <span className={`font-bold ${(summary?.monthRevenue ?? 0) - monthPurchases >= 0 ? "text-green-600" : "text-destructive"}`}>
-                {((summary?.monthRevenue ?? 0) - monthPurchases).toFixed(2)} ج.م
-              </span>
-            </div>
+            {isAdmin && (
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm text-muted-foreground">هامش الربح</span>
+                <span className={`font-bold ${(summary?.monthRevenue ?? 0) - monthPurchases >= 0 ? "text-green-600" : "text-destructive"}`}>
+                  {((summary?.monthRevenue ?? 0) - monthPurchases).toFixed(2)} ج.م
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between py-2">
               <div className="flex items-center gap-2">
                 <Key className="h-4 w-4 text-orange-500" />

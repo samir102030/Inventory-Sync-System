@@ -1,3 +1,4 @@
+import { useRole } from "@/hooks/use-role";
 import { useState, useRef, useMemo } from "react";
 import * as XLSX from "@e965/xlsx";
 import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useGetCategories, getGetProductsQueryKey } from "@workspace/api-client-react";
@@ -113,6 +114,7 @@ function parseExcelRows(data: unknown[][]): ImportRow[] {
 }
 
 export default function Products() {
+  const { isAdmin } = useRole();
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterPriceMin, setFilterPriceMin] = useState("");
@@ -443,7 +445,7 @@ export default function Products() {
                 <TableHead>اسم المنتج</TableHead>
                 <TableHead>القسم</TableHead>
                 <TableHead>السعر (ج.م)</TableHead>
-                <TableHead>التكلفة (ج.م)</TableHead>
+                {isAdmin && <TableHead>التكلفة (ج.م)</TableHead>}
                 <TableHead>مخزون عادي</TableHead>
                 <TableHead>مخزون ضريبي</TableHead>
                 <TableHead>الباركود</TableHead>
@@ -467,7 +469,7 @@ export default function Products() {
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>{product.categoryName}</TableCell>
                   <TableCell>{product.price} ج.م</TableCell>
-                  <TableCell>{product.costPrice ? `${product.costPrice} ج.م` : "-"}</TableCell>
+                  {isAdmin && <TableCell>{product.costPrice ? `${product.costPrice} ج.م` : "-"}</TableCell>}
                   <TableCell>
                     {product.stock <= (product.minStock || 0)
                       ? <Badge variant="destructive">{product.stock}</Badge>
@@ -541,10 +543,10 @@ export default function Products() {
                 <Label>السعر (ج.م) *</Label>
                 <Input type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} required />
               </div>
-              <div className="space-y-2">
+              {isAdmin && <div className="space-y-2">
                 <Label>التكلفة (ج.م)</Label>
                 <Input type="number" step="0.01" value={formData.costPrice} onChange={e => setFormData({ ...formData, costPrice: e.target.value })} />
-              </div>
+              </div>}
               <div className="space-y-2">
                 <Label>المخزون الحالي</Label>
                 <Input type="number" value={formData.stock} onChange={e => setFormData({ ...formData, stock: e.target.value })} required />

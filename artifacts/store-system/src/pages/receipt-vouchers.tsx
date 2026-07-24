@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRole } from "@/hooks/use-role";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ const BASE = "/api";
 const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
 
 export default function ReceiptVouchers() {
+  const { isAdmin } = useRole();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ customerId: "", customerName: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), accountId: "", reference: "", notes: "" });
 
@@ -66,6 +68,13 @@ export default function ReceiptVouchers() {
     const rows = (vouchers ?? []).map(v => [v.voucherNumber, v.date, v.customerName ?? "", v.amount, v.reference ?? "", v.notes ?? ""]);
     exportToExcel(["رقم السند","التاريخ","العميل","المبلغ","المرجع","ملاحظات"], rows, "receipt_vouchers", "سندات القبض");
   };
+
+  if (!isAdmin) return (
+    <div className="flex flex-col items-center justify-center h-96 gap-3 text-muted-foreground">
+      <span className="text-5xl">🔒</span>
+      <p className="text-lg font-medium">هذه الصفحة للمدير فقط</p>
+    </div>
+  );
 
   return (
     <div className="space-y-6">

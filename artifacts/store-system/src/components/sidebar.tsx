@@ -39,6 +39,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
+import { useRole } from "@/hooks/use-role";
 import { Button } from "./ui/button";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -116,6 +117,7 @@ function NavGroup({ label, items, location }: { label: string; items: { title: s
 export function AppSidebar() {
   const [location] = useLocation();
   const { data: user } = useGetMe();
+  const { isAdmin } = useRole();
   const logoutMutation = useLogout();
 
   const handleLogout = () => {
@@ -123,6 +125,10 @@ export function AppSidebar() {
       onSuccess: () => { window.location.href = "/login"; }
     });
   };
+
+  const visibleFinanceItems = isAdmin
+    ? financeItems
+    : financeItems.filter(i => i.url !== "/receipt-vouchers" && i.url !== "/payment-vouchers");
 
   return (
     <Sidebar variant="inset" side="right" dir="rtl">
@@ -135,7 +141,7 @@ export function AppSidebar() {
       <SidebarContent>
         <NavGroup label="المبيعات" items={salesItems} location={location} />
         <NavGroup label="المشتريات" items={purchaseItems} location={location} />
-        <NavGroup label="المالية" items={financeItems} location={location} />
+        <NavGroup label="المالية" items={visibleFinanceItems} location={location} />
         <NavGroup label="المخزون" items={inventoryItems} location={location} />
         <NavGroup label="العملاء" items={crmItems} location={location} />
         <NavGroup label="أخرى" items={otherItems} location={location} />

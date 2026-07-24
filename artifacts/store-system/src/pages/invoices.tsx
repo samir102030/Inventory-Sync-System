@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRole } from "@/hooks/use-role";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetInvoices, useGetInvoice, useGetInvoiceSettings, getGetInvoicesQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -505,6 +506,7 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
 }
 
 export function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => void; onReturn: () => void }) {
+  const { isAdmin } = useRole();
   const { data: invoice, isLoading } = useGetInvoice(id);
   const { data: settings } = useGetInvoiceSettings();
   const { data: returns = [] } = useQuery<InvoiceReturn[]>({
@@ -560,7 +562,7 @@ export function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: ()
             <TableHead>الكمية</TableHead>
             <TableHead>سعر الوحدة</TableHead>
             <TableHead className="text-left">المجموع</TableHead>
-            <TableHead className="text-left text-green-700">الربح 🔒</TableHead>
+            {isAdmin && <TableHead className="text-left text-green-700">الربح 🔒</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -573,9 +575,9 @@ export function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: ()
                 <TableCell>{item.quantity}</TableCell>
                 <TableCell>{item.unitPrice} ج.م</TableCell>
                 <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice - item.discount).toFixed(2)} ج.م</TableCell>
-                <TableCell className={`text-left font-bold text-sm ${itemProfit >= 0 ? "text-green-700" : "text-red-600"}`}>
+                {isAdmin && <TableCell className={`text-left font-bold text-sm ${itemProfit >= 0 ? "text-green-700" : "text-red-600"}`}>
                   {cost > 0 ? `${itemProfit.toFixed(2)} ج.م` : <span className="text-muted-foreground text-xs">—</span>}
-                </TableCell>
+                </TableCell>}
               </TableRow>
             );
           })}
@@ -590,7 +592,7 @@ export function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: ()
           const hasAnyCost = items.some(i => ((i as any).costPrice ?? 0) > 0);
           const grossProfit = invoice.total - totalCost;
           const margin = invoice.total > 0 ? (grossProfit / invoice.total) * 100 : 0;
-          return hasAnyCost ? (
+          return isAdmin && hasAnyCost ? (
             <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm space-y-1 min-w-52">
               <div className="font-semibold text-green-800 flex items-center gap-1 mb-1">🔒 الربح (داخلي فقط)</div>
               <div className="flex justify-between"><span className="text-muted-foreground">إجمالي التكلفة:</span><span>{totalCost.toFixed(2)} ج.م</span></div>

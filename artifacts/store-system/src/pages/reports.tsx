@@ -1,4 +1,5 @@
 import { useGetDailyReport, useExportBackup } from "@workspace/api-client-react";
+import { useRole } from "@/hooks/use-role";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
@@ -8,6 +9,7 @@ export default function Reports() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const { data: report, isLoading } = useGetDailyReport({ date: today });
   const exportBackup = useExportBackup();
+  const { isAdmin } = useRole();
 
   const handleBackup = () => {
     exportBackup.mutate(undefined, {
@@ -51,10 +53,12 @@ export default function Reports() {
                 <span className="font-medium text-destructive">المصروفات</span>
                 <span className="text-lg font-bold text-destructive">{report?.totalExpenses?.toFixed(2) || 0} ج.م</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-primary/10 rounded-lg border border-primary/20">
-                <span className="font-bold text-primary">صافي الربح</span>
-                <span className="text-xl font-bold text-primary">{report?.netProfit?.toFixed(2) || 0} ج.م</span>
-              </div>
+              {isAdmin && (
+                <div className="flex justify-between items-center p-3 bg-primary/10 rounded-lg border border-primary/20">
+                  <span className="font-bold text-primary">صافي الربح</span>
+                  <span className="text-xl font-bold text-primary">{report?.netProfit?.toFixed(2) || 0} ج.م</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
