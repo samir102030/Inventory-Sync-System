@@ -359,7 +359,7 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
   );
 }
 
-function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation; onEdit: () => void; onClose: () => void }) {
+export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quotation; onEdit: () => void; onClose: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: settings } = useGetInvoiceSettings();

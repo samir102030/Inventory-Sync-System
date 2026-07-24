@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { QuotationDetail } from "@/pages/quotations";
+import { InvoiceDetail } from "@/pages/invoices";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -217,6 +218,8 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
   const [linkTab, setLinkTab] = useState<"invoices" | "quotations" | "expenses" | null>(null);
   const [invFilter, setInvFilter] = useState<"customer" | "all">("customer");
   const [quotFilter, setQuotFilter] = useState<"customer" | "all">("customer");
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<number | null>(null);
+  const [previewQuotation, setPreviewQuotation] = useState<any | null>(null);
 
   const { data: detail, isLoading } = useQuery<ProjectDetail>({
     queryKey: ["project", summary.id],
@@ -404,15 +407,23 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
                 </TableRow></TableHeader>
                 <TableBody>
                   {detail.invoices.map(inv => (
-                    <TableRow key={inv.id}>
+                    <TableRow key={inv.id} className="cursor-pointer hover:bg-green-50/50">
                       <TableCell className="font-mono font-medium text-sm">{inv.invoiceNumber}</TableCell>
                       <TableCell className="text-green-700 font-medium">{cur(Number(inv.total))}</TableCell>
                       <TableCell className="text-gray-500 text-xs">{fmtDate(inv.createdAt)}</TableCell>
-                      <TableCell className="w-8">
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600"
-                          onClick={() => invLink.mutate({ id: inv.id, link: false })}>
-                          <Unlink className="h-3 w-3" />
-                        </Button>
+                      <TableCell className="w-16">
+                        <div className="flex gap-0.5">
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600 hover:text-green-800"
+                            title="عرض الفاتورة"
+                            onClick={() => setPreviewInvoiceId(inv.id)}>
+                            <ArrowUpRight className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600"
+                            title="إلغاء الربط"
+                            onClick={() => invLink.mutate({ id: inv.id, link: false })}>
+                            <Unlink className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -480,7 +491,7 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
                 </TableRow></TableHeader>
                 <TableBody>
                   {detail.quotations.map(q => (
-                    <TableRow key={q.id}>
+                    <TableRow key={q.id} className="cursor-pointer hover:bg-violet-50/50">
                       <TableCell className="font-mono font-medium text-sm">{q.quotationNumber}</TableCell>
                       <TableCell className="text-violet-700 font-medium">{cur(Number(q.total))}</TableCell>
                       <TableCell className="text-xs">{QUOT_STATUS[q.status] ?? q.status}</TableCell>
@@ -488,8 +499,8 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
                       <TableCell className="w-16">
                         <div className="flex gap-0.5">
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-violet-500 hover:text-violet-700"
-                            title="فتح عرض السعر"
-                            onClick={() => navigate(`/quotations?open=${q.id}`)}>
+                            title="عرض عرض السعر"
+                            onClick={() => setPreviewQuotation(q)}>
                             <ArrowUpRight className="h-3 w-3" />
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600"
@@ -569,6 +580,38 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
           <span className="font-medium text-gray-700">ملاحظات: </span>{detail.notes}
         </div>
       )}
+
+      {/* ── Invoice preview dialog ── */}
+      <Dialog open={!!previewInvoiceId} onOpenChange={open => !open && setPreviewInvoiceId(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>تفاصيل الفاتورة</DialogTitle>
+          </DialogHeader>
+          {previewInvoiceId && (
+            <InvoiceDetail
+              id={previewInvoiceId}
+              onEdit={() => setPreviewInvoiceId(null)}
+              onReturn={() => setPreviewInvoiceId(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Quotation preview dialog ── */}
+      <Dialog open={!!previewQuotation} onOpenChange={open => !open && setPreviewQuotation(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>تفاصيل عرض السعر</DialogTitle>
+          </DialogHeader>
+          {previewQuotation && (
+            <QuotationDetail
+              quotation={previewQuotation}
+              onEdit={() => setPreviewQuotation(null)}
+              onClose={() => setPreviewQuotation(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

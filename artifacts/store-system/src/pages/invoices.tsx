@@ -504,7 +504,7 @@ function printReceiptWindow(invoice: any, settings: any, returns: any[]) {
   if (win) { win.document.write(html); win.document.close(); }
 }
 
-function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => void; onReturn: () => void }) {
+export function InvoiceDetail({ id, onEdit, onReturn }: { id: number; onEdit: () => void; onReturn: () => void }) {
   const { data: invoice, isLoading } = useGetInvoice(id);
   const { data: settings } = useGetInvoiceSettings();
   const { data: returns = [] } = useQuery<InvoiceReturn[]>({
