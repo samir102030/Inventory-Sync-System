@@ -449,6 +449,31 @@ function BackupResetSection() {
   const [confirmText, setConfirmText] = useState("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRestore = async (file: File) => {
+    setRestoring(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.exportedAt) throw new Error("ملف غير صالح");
+      const res = await fetch("/api/backup/restore", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error();
+      toast({ title: "تم استعادة النسخة الاحتياطية بنجاح — سيتم تحديث الصفحة" });
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e: any) {
+      toast({ title: e?.message === "ملف غير صالح" ? "الملف المختار ليس نسخة احتياطية صالحة" : "فشلت الاستعادة، تحقق من الملف وحاول مجدداً", variant: "destructive" });
+    } finally {
+      setRestoring(false);
+      if (restoreInputRef.current) restoreInputRef.current.value = "";
+    }
+  };
 
   const handleBackup = async () => {
     try {
@@ -508,6 +533,34 @@ function BackupResetSection() {
               <Download className="h-4 w-4" />
               تنزيل Backup
             </Button>
+          </div>
+
+          {/* Restore */}
+          <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-muted/50 border">
+            <div>
+              <p className="font-medium">استعادة من نسخة احتياطية</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                ارفع ملف JSON سبق تنزيله — سيتم مسح البيانات الحالية واستبدالها بالنسخة المحفوظة
+              </p>
+            </div>
+            <div className="shrink-0">
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={restoring}
+                onClick={() => restoreInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4" />
+                {restoring ? "جارٍ الاستعادة..." : "رفع Backup"}
+              </Button>
+              <input
+                ref={restoreInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleRestore(f); }}
+              />
+            </div>
           </div>
 
           {/* Reset */}
