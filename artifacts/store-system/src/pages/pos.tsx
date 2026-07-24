@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useGetProducts, useGetCustomers, useCreateInvoice, useGetCategories, useGetInvoiceSettings, getGetProductsQueryKey, getGetSummaryQueryKey } from "@workspace/api-client-react";
+import { useGetProducts, useGetCustomers, useCreateInvoice, useCreateCustomer, useGetCategories, useGetInvoiceSettings, getGetProductsQueryKey, getGetSummaryQueryKey, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle, Wallet, Receipt, Printer } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Search, Trash2, ShoppingCart, User, CreditCard, MessageCircle, CheckCircle, Wallet, Receipt, Printer, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
@@ -106,7 +107,13 @@ export default function POS() {
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(0);
   const [successInvoice, setSuccessInvoice] = useState<CreatedInvoice | null>(null);
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerAddress, setNewCustomerAddress] = useState("");
   const { data: invoiceSettings } = useGetInvoiceSettings();
+  const createCustomer = useCreateCustomer();
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const barcodeBuffer = useRef("");
@@ -382,7 +389,7 @@ export default function POS() {
 
         <div className="p-4 bg-muted/30 border-t space-y-4">
           <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-muted-foreground" />
+            <User className="h-4 w-4 text-muted-foreground shrink-0" />
             <Select value={customerId.toString()} onValueChange={(v) => setCustomerId(v === "none" ? "" : parseInt(v))}>
               <SelectTrigger className="w-full bg-background">
                 <SelectValue placeholder="اختر العميل (اختياري)" />
@@ -394,6 +401,15 @@ export default function POS() {
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              title="إضافة عميل جديد"
+              onClick={() => setShowAddCustomer(true)}
+            >
+              <UserPlus className="h-4 w-4" />
+            </Button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -479,6 +495,87 @@ export default function POS() {
         </div>
       </Card>
     </div>
+
+    {/* Add Customer Dialog */}
+    <Dialog open={showAddCustomer} onOpenChange={setShowAddCustomer}>
+      <DialogContent dir="rtl" className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5" />
+            إضافة عميل جديد
+          </DialogTitle>
+          <DialogDescription>سيتم اختيار العميل تلقائياً بعد الإضافة</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>الاسم <span className="text-red-500">*</span></Label>
+            <Input
+              placeholder="اسم العميل"
+              value={newCustomerName}
+              onChange={e => setNewCustomerName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>رقم الهاتف</Label>
+            <Input
+              placeholder="مثال: 05xxxxxxxx"
+              value={newCustomerPhone}
+              onChange={e => setNewCustomerPhone(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>البريد الإلكتروني</Label>
+            <Input
+              placeholder="example@email.com"
+              value={newCustomerEmail}
+              onChange={e => setNewCustomerEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>العنوان</Label>
+            <Input
+              placeholder="عنوان العميل (اختياري)"
+              value={newCustomerAddress}
+              onChange={e => setNewCustomerAddress(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              className="flex-1"
+              disabled={!newCustomerName.trim() || createCustomer.isPending}
+              onClick={() => {
+                createCustomer.mutate({
+                  data: {
+                    name: newCustomerName.trim(),
+                    ...(newCustomerPhone && { phone: newCustomerPhone.trim() }),
+                    ...(newCustomerEmail && { email: newCustomerEmail.trim() }),
+                    ...(newCustomerAddress && { address: newCustomerAddress.trim() }),
+                  }
+                }, {
+                  onSuccess: (newCust: any) => {
+                    queryClient.invalidateQueries({ queryKey: getGetCustomersQueryKey() });
+                    setCustomerId(newCust.id);
+                    setShowAddCustomer(false);
+                    setNewCustomerName("");
+                    setNewCustomerPhone("");
+                    setNewCustomerEmail("");
+                    setNewCustomerAddress("");
+                    toast({ title: `تم إضافة العميل "${newCust.name}" واختياره` });
+                  },
+                  onError: () => {
+                    toast({ title: "حدث خطأ أثناء إضافة العميل", variant: "destructive" });
+                  }
+                });
+              }}
+            >
+              {createCustomer.isPending ? "جارٍ الإضافة..." : "إضافة واختيار"}
+            </Button>
+            <Button variant="outline" onClick={() => setShowAddCustomer(false)}>إلغاء</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     {/* Receipt Dialog */}
     <Dialog open={!!successInvoice} onOpenChange={open => !open && setSuccessInvoice(null)}>
