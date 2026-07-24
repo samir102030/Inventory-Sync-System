@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetInvoiceSettings } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -618,6 +618,23 @@ export default function Quotations() {
     queryKey: ["quotations"],
     queryFn: () => fetchJSON(`${BASE}/quotations`),
   });
+
+  // auto-open a quotation if ?open=<id> is in the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get("open");
+    if (openId && !isLoading && quotations.length > 0) {
+      const id = Number(openId);
+      if (quotations.find(q => q.id === id)) {
+        setSelectedId(id);
+        setDialogMode("view");
+        // clean up the URL without a page reload
+        const url = new URL(window.location.href);
+        url.searchParams.delete("open");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  }, [isLoading, quotations]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => fetchJSON(`${BASE}/quotations/${id}`, { method: "DELETE" }),

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Search, Edit, Trash2, Link2, Unlink, X,
   FolderOpen, TrendingUp, TrendingDown, Wrench, FileText, FileCheck,
-  ChevronLeft, AlertCircle,
+  ChevronLeft, AlertCircle, ArrowUpRight,
 } from "lucide-react";
 
 const BASE = "/api";
@@ -212,6 +213,7 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [linkTab, setLinkTab] = useState<"invoices" | "quotations" | "expenses" | null>(null);
   const [invFilter, setInvFilter] = useState<"customer" | "all">("customer");
   const [quotFilter, setQuotFilter] = useState<"customer" | "all">("customer");
@@ -483,11 +485,19 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
                       <TableCell className="text-violet-700 font-medium">{cur(Number(q.total))}</TableCell>
                       <TableCell className="text-xs">{QUOT_STATUS[q.status] ?? q.status}</TableCell>
                       <TableCell className="text-gray-500 text-xs">{fmtDate(q.createdAt)}</TableCell>
-                      <TableCell className="w-8">
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600"
-                          onClick={() => quotLink.mutate({ id: q.id, link: false })}>
-                          <Unlink className="h-3 w-3" />
-                        </Button>
+                      <TableCell className="w-16">
+                        <div className="flex gap-0.5">
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-violet-500 hover:text-violet-700"
+                            title="فتح عرض السعر"
+                            onClick={() => navigate(`/quotations?open=${q.id}`)}>
+                            <ArrowUpRight className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600"
+                            title="إلغاء الربط"
+                            onClick={() => quotLink.mutate({ id: q.id, link: false })}>
+                            <Unlink className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
