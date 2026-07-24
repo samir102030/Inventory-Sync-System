@@ -26,6 +26,7 @@ import {
   FolderOpen,
   Building2,
   Coins,
+  Wallet,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -73,6 +74,7 @@ const financeItems = [
   { title: "إيجار الممتلكات", url: "/rental-properties", icon: Building2 },
   { title: "الجمعيات", url: "/jam3iyyat", icon: Coins },
   { title: "الموظفون والرواتب", url: "/employees", icon: UserCheck },
+  { title: "مسحوبات الكريدت كارد", url: "/credit-cards", icon: Wallet },
 ];
 
 const inventoryItems = [

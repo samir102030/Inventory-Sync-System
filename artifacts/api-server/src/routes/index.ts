@@ -22,6 +22,7 @@ import quotationsRouter from "./quotations";
 import projectsRouter from "./projects";
 import rentalRouter from "./rental";
 import jam3iyyatRouter from "./jam3iyyat";
+import creditCardsRouter from "./credit-cards";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(quotationsRouter);
 router.use(projectsRouter);
 router.use(rentalRouter);
 router.use(jam3iyyatRouter);
+router.use(creditCardsRouter);
 
 export default router;
