@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import type { InvoiceItemInput, InvoiceInputPaymentMethod, Product } from "@workspace/api-client-react/src/generated/api.schemas";
 import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
+import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 function escapeHtml(v: unknown): string {
   return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -92,7 +94,7 @@ function printPOSReceipt(invoice: CreatedInvoice, settings: any) {
 }
 
 type CartItem = Product & { cartQuantity: number; discount: number; unitPrice: number };
-type CreatedInvoice = { invoiceNumber: string; total: number; subtotal: number; discount: number; tax: number; paymentMethod: string; customerName?: string | null; customerWhatsapp?: string | null; items?: Array<{ productName: string; quantity: number; unitPrice: number }> };
+type CreatedInvoice = { invoiceNumber: string; total: number; subtotal: number; discount: number; tax: number; paymentMethod: string; customerName?: string | null; customerWhatsapp?: string | null; createdAt: string; items?: Array<{ productName: string; quantity: number; unitPrice: number }> };
 type Account = { id: number; name: string; type: string };
 
 const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
@@ -232,6 +234,7 @@ export default function POS() {
         setSuccessInvoice({
           ...inv,
           customerWhatsapp: inv.customerWhatsapp ?? (customer as any)?.whatsapp ?? null,
+          createdAt: inv.createdAt ?? new Date().toISOString(),
           items: cartSnapshot.map(i => ({ productName: i.name, quantity: i.cartQuantity, unitPrice: i.unitPrice })),
         });
         setCart([]);
@@ -577,108 +580,108 @@ export default function POS() {
       </DialogContent>
     </Dialog>
 
-    {/* Receipt Dialog */}
+    {/* Receipt Dialog — same style as InvoiceDetail */}
     <Dialog open={!!successInvoice} onOpenChange={open => !open && setSuccessInvoice(null)}>
-      <DialogContent dir="rtl" className="max-w-sm p-0 gap-0 overflow-hidden">
-        <DialogHeader className="bg-green-50 border-b px-4 py-3">
+      <DialogContent dir="rtl" className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-green-700">
             <CheckCircle className="h-5 w-5" />
             تم إصدار الفاتورة بنجاح
           </DialogTitle>
-          <DialogDescription className="text-green-600 text-xs">اضغط طباعة للحصول على نسخة ورقية</DialogDescription>
+          <DialogDescription>يمكنك طباعة الفاتورة أو إرسالها على واتساب</DialogDescription>
         </DialogHeader>
 
-        {successInvoice && (
-          <>
-            {/* Receipt preview */}
-            <div className="px-4 py-3 space-y-3 max-h-[60vh] overflow-y-auto text-sm">
-              {/* Company */}
-              {(invoiceSettings as any)?.companyName && (
-                <div className="text-center">
-                  <p className="font-bold text-base" style={{ color: (invoiceSettings as any)?.primaryColor || "#1e40af" }}>
-                    {(invoiceSettings as any).companyName}
-                  </p>
-                  {(invoiceSettings as any)?.companyPhone && (
-                    <p className="text-xs text-muted-foreground">{(invoiceSettings as any).companyPhone}</p>
-                  )}
+        {successInvoice && (() => {
+          const settings = invoiceSettings as any;
+          const companyName  = settings?.companyName  || "شركتي";
+          const companyPhone = settings?.companyPhone || "";
+          const companyAddress = settings?.companyAddress || "";
+          const companyLogo  = settings?.companyLogo  || "";
+          const primaryColor = settings?.primaryColor || "#1e40af";
+
+          return (
+            <div className="space-y-5">
+              {/* Company Header */}
+              <div className="flex justify-between items-start pb-4 border-b-2" style={{ borderColor: primaryColor }}>
+                <div>
+                  <h2 className="text-xl font-bold" style={{ color: primaryColor }}>{companyName}</h2>
+                  {companyPhone   && <p className="text-sm text-muted-foreground">📞 {companyPhone}</p>}
+                  {companyAddress && <p className="text-sm text-muted-foreground">📍 {companyAddress}</p>}
                 </div>
-              )}
-
-              <div className="border-t border-dashed pt-2 space-y-1">
-                <div className="flex justify-between"><span className="text-muted-foreground">رقم الفاتورة</span><span className="font-mono font-bold">{successInvoice.invoiceNumber}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">التاريخ</span><span>{new Date().toLocaleDateString("ar-EG")}</span></div>
-                {successInvoice.customerName && <div className="flex justify-between"><span className="text-muted-foreground">العميل</span><span>{successInvoice.customerName}</span></div>}
-                <div className="flex justify-between"><span className="text-muted-foreground">طريقة الدفع</span><span>{PAYMENT_LABELS[successInvoice.paymentMethod] || successInvoice.paymentMethod}</span></div>
+                {companyLogo
+                  ? <img src={companyLogo} className="h-14 max-w-[140px] object-contain" alt="logo" />
+                  : <div className="text-2xl font-black opacity-20">{companyName.slice(0, 2)}</div>
+                }
               </div>
 
-              {/* Items */}
-              <div className="border-t border-dashed pt-2 space-y-1.5">
-                {successInvoice.items?.map((item, i) => (
-                  <div key={i}>
-                    <p className="font-medium text-xs">{item.productName}</p>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{item.quantity} × {Number(item.unitPrice).toFixed(2)} ج.م</span>
-                      <span className="font-medium text-foreground">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</span>
-                    </div>
-                  </div>
-                ))}
+              {/* Invoice Meta */}
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-2xl font-bold">فاتورة #{successInvoice.invoiceNumber}</h2>
+                  <p className="text-muted-foreground text-sm">{format(new Date(successInvoice.createdAt), 'yyyy/MM/dd HH:mm')}</p>
+                  <Badge className="mt-1 bg-green-100 text-green-800 hover:bg-green-100">مدفوعة</Badge>
+                </div>
+                <div className="text-left space-y-1">
+                  <p className="font-bold">{successInvoice.customerName || 'عميل نقدي'}</p>
+                  <p className="text-sm text-muted-foreground">طريقة الدفع: {PAYMENT_LABELS[successInvoice.paymentMethod] || successInvoice.paymentMethod}</p>
+                </div>
               </div>
+
+              {/* Items Table */}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>المنتج</TableHead>
+                    <TableHead>الكمية</TableHead>
+                    <TableHead>سعر الوحدة</TableHead>
+                    <TableHead className="text-left">المجموع</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {successInvoice.items?.map((item, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{item.productName}</TableCell>
+                      <TableCell>{item.quantity}</TableCell>
+                      <TableCell>{Number(item.unitPrice).toFixed(2)} ج.م</TableCell>
+                      <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
               {/* Totals */}
-              <div className="border-t border-dashed pt-2 space-y-1">
-                {Number(successInvoice.subtotal) !== Number(successInvoice.total) && (
-                  <div className="flex justify-between text-xs text-muted-foreground"><span>المجموع الفرعي</span><span>{Number(successInvoice.subtotal).toFixed(2)} ج.م</span></div>
-                )}
-                {Number(successInvoice.discount) > 0 && (
-                  <div className="flex justify-between text-xs text-red-600"><span>الخصم</span><span>-{Number(successInvoice.discount).toFixed(2)} ج.م</span></div>
-                )}
-                {Number(successInvoice.tax) > 0 && (
-                  <div className="flex justify-between text-xs"><span>الضريبة</span><span>+{Number(successInvoice.tax).toFixed(2)} ج.م</span></div>
-                )}
-                <div className="flex justify-between font-bold text-base border-t pt-1.5" style={{ color: (invoiceSettings as any)?.primaryColor || "#1e40af" }}>
-                  <span>الإجمالي</span>
-                  <span>{Number(successInvoice.total).toFixed(2)} ج.م</span>
+              <div className="flex justify-end pt-2 border-t">
+                <div className="w-64 space-y-1.5">
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي:</span><span>{Number(successInvoice.subtotal).toFixed(2)} ج.م</span></div>
+                  {Number(successInvoice.discount) > 0 && <div className="flex justify-between text-sm text-destructive"><span>الخصم:</span><span>-{Number(successInvoice.discount).toFixed(2)} ج.م</span></div>}
+                  {Number(successInvoice.tax) > 0 && <div className="flex justify-between text-sm"><span>الضريبة:</span><span>+{Number(successInvoice.tax).toFixed(2)} ج.م</span></div>}
+                  <div className="flex justify-between text-lg font-bold border-t pt-1"><span>الإجمالي:</span><span>{Number(successInvoice.total).toFixed(2)} ج.م</span></div>
                 </div>
               </div>
 
-              {(invoiceSettings as any)?.footerNote && (
-                <p className="text-center text-xs text-muted-foreground border-t border-dashed pt-2">
-                  {(invoiceSettings as any).footerNote}
-                </p>
-              )}
+              {/* Actions */}
+              <div className="flex justify-between items-center pt-3 border-t">
+                <div>
+                  {successInvoice.customerWhatsapp && (
+                    <Button variant="outline" size="sm" className="text-green-600 border-green-500 hover:bg-green-50 gap-1"
+                      onClick={() => openWhatsApp(successInvoice.customerWhatsapp!, buildInvoiceMessage(successInvoice))}>
+                      <MessageCircle className="h-4 w-4" />إرسال واتساب
+                    </Button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-1" onClick={() => printPOSReceipt(successInvoice, invoiceSettings)}>
+                    <Printer className="h-4 w-4" />ريسيت
+                  </Button>
+                  <Button size="sm" className="gap-1" onClick={() => printInvoiceWindow(successInvoice, invoiceSettings, [])}>
+                    <Printer className="h-4 w-4" />A4 / PDF
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSuccessInvoice(null)}>إغلاق</Button>
+                </div>
+              </div>
             </div>
-
-            {/* Actions */}
-            <div className="border-t px-4 py-3 grid grid-cols-2 gap-2">
-              <Button
-                className="gap-1.5"
-                onClick={() => printPOSReceipt(successInvoice, invoiceSettings)}
-              >
-                <Printer className="h-4 w-4" />
-                طباعة
-              </Button>
-              {successInvoice.customerWhatsapp ? (
-                <Button
-                  variant="outline"
-                  className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50"
-                  onClick={() => openWhatsApp(successInvoice.customerWhatsapp!, buildInvoiceMessage(successInvoice))}
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  واتساب
-                </Button>
-              ) : (
-                <Button variant="outline" onClick={() => setSuccessInvoice(null)}>
-                  إغلاق
-                </Button>
-              )}
-              {successInvoice.customerWhatsapp && (
-                <Button variant="ghost" className="col-span-2 text-muted-foreground text-xs h-7" onClick={() => setSuccessInvoice(null)}>
-                  إغلاق
-                </Button>
-              )}
-            </div>
-          </>
-        )}
+          );
+        })()}
       </DialogContent>
     </Dialog>
     </>
