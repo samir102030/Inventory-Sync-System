@@ -444,34 +444,73 @@ export default function Settings() {
   );
 }
 
+type BackupPreview = {
+  exportedAt: string;
+  raw: any;
+  counts: { label: string; count: number }[];
+};
+
 function BackupResetSection() {
   const { toast } = useToast();
   const [confirmText, setConfirmText] = useState("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const restoreInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [preview, setPreview] = useState<BackupPreview | null>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleRestore = async (file: File) => {
-    setRestoring(true);
+  const loadFile = async (file: File) => {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      if (!data.exportedAt) throw new Error("ملف غير صالح");
+      if (!data.exportedAt) throw new Error("invalid");
+      const counts = [
+        { label: "منتجات",    count: data.products?.length        ?? 0 },
+        { label: "فئات",      count: data.categories?.length      ?? 0 },
+        { label: "عملاء",     count: data.customers?.length       ?? 0 },
+        { label: "موردين",    count: data.suppliers?.length       ?? 0 },
+        { label: "فواتير",    count: data.invoices?.length        ?? 0 },
+        { label: "عروض أسعار",count: data.quotations?.length      ?? 0 },
+        { label: "مشتريات",   count: data.purchases?.length       ?? 0 },
+        { label: "مصروفات",   count: data.expenses?.length        ?? 0 },
+        { label: "مشاريع",    count: data.projects?.length        ?? 0 },
+        { label: "حسابات",    count: data.accounts?.length        ?? 0 },
+        { label: "موظفين",    count: data.employees?.length       ?? 0 },
+        { label: "مستودعات",  count: data.warehouses?.length      ?? 0 },
+      ].filter(c => c.count > 0);
+      setPreview({ exportedAt: data.exportedAt, raw: data, counts });
+    } catch {
+      toast({ title: "الملف المختار ليس نسخة احتياطية صالحة", variant: "destructive" });
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file?.name.endsWith(".json")) loadFile(file);
+    else toast({ title: "يرجى إسقاط ملف JSON فقط", variant: "destructive" });
+  };
+
+  const applyRestore = async () => {
+    if (!preview) return;
+    setRestoring(true);
+    try {
       const res = await fetch("/api/backup/restore", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(preview.raw),
       });
       if (!res.ok) throw new Error();
-      toast({ title: "تم استعادة النسخة الاحتياطية بنجاح — سيتم تحديث الصفحة" });
+      toast({ title: "تم استعادة النسخة الاحتياطية — سيتم تحديث الصفحة" });
       setTimeout(() => window.location.reload(), 1500);
-    } catch (e: any) {
-      toast({ title: e?.message === "ملف غير صالح" ? "الملف المختار ليس نسخة احتياطية صالحة" : "فشلت الاستعادة، تحقق من الملف وحاول مجدداً", variant: "destructive" });
+    } catch {
+      toast({ title: "فشلت الاستعادة، حاول مجدداً", variant: "destructive" });
     } finally {
       setRestoring(false);
-      if (restoreInputRef.current) restoreInputRef.current.value = "";
     }
   };
 
@@ -483,9 +522,8 @@ function BackupResetSection() {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const date = new Date().toISOString().slice(0, 10);
       a.href = url;
-      a.download = `backup-${date}.json`;
+      a.download = `backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       toast({ title: "تم تنزيل النسخة الاحتياطية بنجاح" });
@@ -512,76 +550,109 @@ function BackupResetSection() {
 
   return (
     <>
-      <Card className="border-destructive/30">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Download className="h-5 w-5" />
-            النسخ الاحتياطي وإعادة الضبط
+            النسخ الاحتياطي والاستعادة
           </CardTitle>
-          <CardDescription>نسّخ بياناتك أو امسح كل شيء وابدأ من جديد</CardDescription>
+          <CardDescription>احفظ بياناتك أو استعدها من ملف سابق</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Backup */}
-          <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-muted/50 border">
+
+          {/* Download backup */}
+          <div className="flex items-center justify-between gap-4 p-4 rounded-lg bg-muted/50 border">
             <div>
-              <p className="font-medium">تنزيل نسخة احتياطية كاملة</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                ملف JSON يحتوي على جميع البيانات — منتجات، فواتير، عملاء، مصروفات، مشاريع، وأكثر
-              </p>
+              <p className="font-medium">تنزيل نسخة احتياطية</p>
+              <p className="text-sm text-muted-foreground">ملف JSON يحتوي على كامل بيانات النظام</p>
             </div>
             <Button variant="outline" className="shrink-0 gap-2" onClick={handleBackup}>
-              <Download className="h-4 w-4" />
-              تنزيل Backup
+              <Download className="h-4 w-4" /> تنزيل Backup
             </Button>
           </div>
 
-          {/* Restore */}
-          <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-muted/50 border">
-            <div>
-              <p className="font-medium">استعادة من نسخة احتياطية</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                ارفع ملف JSON سبق تنزيله — سيتم مسح البيانات الحالية واستبدالها بالنسخة المحفوظة
-              </p>
-            </div>
-            <div className="shrink-0">
-              <Button
-                variant="outline"
-                className="gap-2"
-                disabled={restoring}
-                onClick={() => restoreInputRef.current?.click()}
-              >
-                <Upload className="h-4 w-4" />
-                {restoring ? "جارٍ الاستعادة..." : "رفع Backup"}
-              </Button>
+          {/* Drag-and-drop restore zone */}
+          {!preview ? (
+            <div
+              ref={dropRef}
+              onDragOver={e => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed cursor-pointer transition-colors
+                ${dragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/40"}`}
+            >
+              <Upload className={`h-8 w-8 ${dragging ? "text-primary" : "text-muted-foreground"}`} />
+              <div className="text-center">
+                <p className="font-medium">اسحب ملف الـ Backup هنا</p>
+                <p className="text-sm text-muted-foreground mt-0.5">أو اضغط لاختيار الملف — يقبل .json فقط</p>
+              </div>
               <input
-                ref={restoreInputRef}
+                ref={fileInputRef}
                 type="file"
                 accept=".json"
                 className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleRestore(f); }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) loadFile(f); if (fileInputRef.current) fileInputRef.current.value = ""; }}
               />
             </div>
-          </div>
+          ) : (
+            /* Preview panel */
+            <div className="rounded-lg border bg-muted/30 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-muted border-b">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500" />
+                  <p className="font-medium text-sm">نسخة احتياطية جاهزة للاستعادة</p>
+                </div>
+                <button
+                  onClick={() => setPreview(null)}
+                  className="text-muted-foreground hover:text-foreground text-xs flex items-center gap-1"
+                >
+                  <X className="h-3.5 w-3.5" /> إلغاء
+                </button>
+              </div>
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  تاريخ النسخة: <span className="font-medium text-foreground">{new Date(preview.exportedAt).toLocaleString("ar-EG")}</span>
+                </p>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {preview.counts.map(c => (
+                    <div key={c.label} className="bg-background rounded-md border px-3 py-2 text-center">
+                      <p className="text-lg font-bold">{c.count.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{c.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button className="flex-1 gap-2" disabled={restoring} onClick={applyRestore}>
+                    <RotateCcw className="h-4 w-4" />
+                    {restoring ? "جارٍ الاستعادة..." : "تطبيق النسخة الاحتياطية"}
+                  </Button>
+                  <Button variant="outline" onClick={() => setPreview(null)}>إلغاء</Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-          {/* Reset */}
+      {/* Danger zone */}
+      <Card className="border-destructive/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            منطقة الخطر
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
             <div>
-              <p className="font-medium text-destructive flex items-center gap-1.5">
-                <AlertTriangle className="h-4 w-4" />
-                إعادة ضبط النظام بالكامل
-              </p>
+              <p className="font-medium text-destructive">إعادة ضبط النظام بالكامل</p>
               <p className="text-sm text-muted-foreground mt-0.5">
-                يمسح كل البيانات نهائياً — منتجات، فواتير، عملاء، مخزون، مشاريع، إلخ.
-                لا يمكن التراجع عن هذا الإجراء.
+                يمسح كل البيانات نهائياً — لا يمكن التراجع
               </p>
             </div>
-            <Button
-              variant="destructive"
-              className="shrink-0 gap-2"
-              onClick={() => setShowResetDialog(true)}
-            >
-              <RotateCcw className="h-4 w-4" />
-              إعادة الضبط
+            <Button variant="destructive" className="shrink-0 gap-2" onClick={() => setShowResetDialog(true)}>
+              <RotateCcw className="h-4 w-4" /> إعادة الضبط
             </Button>
           </div>
         </CardContent>
