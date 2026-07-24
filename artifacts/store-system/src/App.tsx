@@ -35,6 +35,8 @@ import Employees from "@/pages/employees";
 import Quotations from "@/pages/quotations";
 import StockShortage from "@/pages/stock-shortage";
 import Projects from "@/pages/projects";
+import RentalProperties from "@/pages/rental-properties";
+import Jam3iyyat from "@/pages/jam3iyyat";
 
 const queryClient = new QueryClient();
 
@@ -91,6 +93,8 @@ function Router() {
       <Route path="/quotations"><ProtectedRoute component={Quotations} /></Route>
       <Route path="/stock-shortage"><ProtectedRoute component={StockShortage} /></Route>
       <Route path="/projects"><ProtectedRoute component={Projects} /></Route>
+      <Route path="/rental-properties"><ProtectedRoute component={RentalProperties} /></Route>
+      <Route path="/jam3iyyat"><ProtectedRoute component={Jam3iyyat} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

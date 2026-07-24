@@ -20,6 +20,8 @@ import warehousesRouter from "./warehouses";
 import employeesRouter from "./employees";
 import quotationsRouter from "./quotations";
 import projectsRouter from "./projects";
+import rentalRouter from "./rental";
+import jam3iyyatRouter from "./jam3iyyat";
 
 const router: IRouter = Router();
 
@@ -44,5 +46,7 @@ router.use(warehousesRouter);
 router.use(employeesRouter);
 router.use(quotationsRouter);
 router.use(projectsRouter);
+router.use(rentalRouter);
+router.use(jam3iyyatRouter);
 
 export default router;
