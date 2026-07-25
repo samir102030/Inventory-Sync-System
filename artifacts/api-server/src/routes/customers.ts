@@ -42,14 +42,41 @@ router.post("/customers", async (req, res) => {
 router.post("/customers/bulk-import", async (req, res) => {
   const { customers } = req.body;
   if (!Array.isArray(customers) || !customers.length) return res.status(400).json({ error: "customers array required" });
+
   const results = { created: 0, skipped: 0 };
-  for (const c of customers) {
-    if (!c.name?.trim()) { results.skipped++; continue; }
+
+  // Filter valid rows first
+  const valid = customers.filter(c => c.name?.trim());
+  results.skipped += customers.length - valid.length;
+
+  const rows = valid.map(c => ({
+    name: c.name.trim(),
+    phone: c.phone || null,
+    whatsapp: c.whatsapp || null,
+    email: c.email || null,
+    address: c.address || null,
+    taxNumber: c.taxNumber || null,
+    notes: c.notes || null,
+  }));
+
+  // Batch insert 100 at a time
+  const BATCH = 100;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
     try {
-      await db.insert(customersTable).values({ name: c.name.trim(), phone: c.phone || null, whatsapp: c.whatsapp || null, email: c.email || null, address: c.address || null, taxNumber: c.taxNumber || null, notes: c.notes || null });
-      results.created++;
-    } catch { results.skipped++; }
+      await db.insert(customersTable).values(batch);
+      results.created += batch.length;
+    } catch {
+      // Fallback: insert one by one to skip duplicates/errors
+      for (const row of batch) {
+        try {
+          await db.insert(customersTable).values(row);
+          results.created++;
+        } catch { results.skipped++; }
+      }
+    }
   }
+
   return res.json(results);
 });
 
