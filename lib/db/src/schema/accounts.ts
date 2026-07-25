@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, date, boolean } from "drizzle-orm/pg-core";
 
 export const accountsTable = pgTable("accounts", {
   id: serial("id").primaryKey(),
@@ -7,6 +7,7 @@ export const accountsTable = pgTable("accounts", {
   color: text("color").notNull().default("#3b82f6"),
   initialBalance: numeric("initial_balance", { precision: 12, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  pinned: boolean("pinned").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

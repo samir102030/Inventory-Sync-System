@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet, ArrowLeftRight, Download, Upload, Building, Pencil } from "lucide-react";
+import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet, ArrowLeftRight, Download, Upload, Building, Pencil, Pin, PinOff } from "lucide-react";
 import { exportToExcel, parseExcelFile } from "@/lib/excel";
 import * as XLSX from "@e965/xlsx";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +17,8 @@ import { format } from "date-fns";
 
 type Account = {
   id: number; name: string; type: string; color: string;
-  initialBalance: number; totalIn: number; totalOut: number; balance: number; notes?: string | null; createdAt: string;
+  initialBalance: number; totalIn: number; totalOut: number; balance: number;
+  notes?: string | null; pinned: boolean; createdAt: string;
 };
 type Txn = {
   id: number; accountId: number; direction: string; amount: number;
@@ -141,6 +142,17 @@ export default function Accounts() {
       setTransferForm({ fromAccountId: "", toAccountId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), notes: "" });
     },
     onError: (err: Error) => toast({ title: err.message || "حدث خطأ", variant: "destructive" }),
+  });
+
+  // ── Toggle pin mutation ──
+  const togglePin = useMutation({
+    mutationFn: (account: Account) =>
+      fetch(`${BASE}/accounts/${account.id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: !account.pinned }),
+      }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
   });
 
   // ── Accounts bulk import mutation ──
@@ -411,10 +423,10 @@ export default function Accounts() {
             <p>لا توجد حسابات بعد. أضف حسابك الأول!</p>
           </div>
         ) : (
-          accounts.map(account => (
+          [...accounts].sort((a, b) => Number(b.pinned) - Number(a.pinned)).map(account => (
             <Card
               key={account.id}
-              className={`cursor-pointer transition-all hover:shadow-md ${selectedAccountId === account.id ? "ring-2 ring-primary shadow-md" : ""}`}
+              className={`cursor-pointer transition-all hover:shadow-md ${selectedAccountId === account.id ? "ring-2 ring-primary shadow-md" : ""} ${account.pinned ? "border-amber-400 dark:border-amber-500" : ""}`}
               onClick={() => setSelectedAccountId(prev => prev === account.id ? null : account.id)}
             >
               <CardHeader className="pb-2">
@@ -422,8 +434,17 @@ export default function Accounts() {
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: account.color }} />
                     <CardTitle className="text-base truncate">{account.name}</CardTitle>
+                    {account.pinned && <Pin className="h-3 w-3 text-amber-500 fill-amber-400 flex-shrink-0" />}
                   </div>
                   <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                    <Button
+                      variant="ghost" size="icon"
+                      className={`h-7 w-7 ${account.pinned ? "text-amber-500" : "text-muted-foreground"}`}
+                      title={account.pinned ? "إلغاء التثبيت" : "تثبيت الحساب"}
+                      onClick={() => togglePin.mutate(account)}
+                    >
+                      {account.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditAccount(account)}><Edit className="h-3 w-3" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("حذف الحساب؟")) deleteAccount.mutate(account.id); }}><Trash2 className="h-3 w-3" /></Button>
                   </div>
