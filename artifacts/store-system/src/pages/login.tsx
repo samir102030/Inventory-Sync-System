@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLogin, useGetMe } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { useSignIn } from "@clerk/react";
@@ -20,10 +20,11 @@ export default function Login() {
   const { data: user } = useGetMe();
   const { signIn, fetchStatus } = useSignIn();
 
-  if (user) {
-    setLocation("/dashboard");
-    return null;
-  }
+  useEffect(() => {
+    if (user) setLocation("/dashboard");
+  }, [user]);
+
+  if (user) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
