@@ -12,7 +12,7 @@ router.get("/receipt-vouchers", async (_req, res) => {
 });
 
 router.post("/receipt-vouchers", async (req, res) => {
-  const { customerId, customerName, amount, date, accountId, reference, notes } = req.body;
+  const { customerId, customerName, amount, date, accountId, reference, notes, type } = req.body;
   if (!amount || !date) return res.status(400).json({ error: "amount and date required" });
 
   const [{ cnt }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(receiptVouchersTable);
@@ -22,6 +22,8 @@ router.post("/receipt-vouchers", async (req, res) => {
     ? (await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, customerId)).limit(1))[0]?.name ?? customerName ?? null
     : (customerName ?? null);
 
+  const voucherType = type === "deposit" ? "deposit" : "payment";
+
   const [v] = await db.insert(receiptVouchersTable).values({
     voucherNumber,
     customerId: customerId ?? null,
@@ -29,17 +31,22 @@ router.post("/receipt-vouchers", async (req, res) => {
     amount: String(amount),
     date,
     accountId: accountId ? Number(accountId) : null,
+    type: voucherType,
     reference: reference ?? null,
     notes: notes ?? null,
   }).returning();
 
   if (v.accountId) {
+    const category = voucherType === "deposit" ? "عربون" : "سندات قبض";
+    const description = voucherType === "deposit"
+      ? `عربون رقم ${voucherNumber}${custLabel ? ` — ${custLabel}` : ""}`
+      : `سند قبض رقم ${voucherNumber}${custLabel ? ` — ${custLabel}` : ""}`;
     await db.insert(accountTransactionsTable).values({
       accountId: v.accountId,
       direction: "in",
       amount: String(amount),
-      description: `سند قبض رقم ${voucherNumber}${custLabel ? ` — ${custLabel}` : ""}`,
-      category: "سندات قبض",
+      description,
+      category,
       date,
       reference: `receipt-voucher:${v.id}`,
     });
@@ -49,7 +56,7 @@ router.post("/receipt-vouchers", async (req, res) => {
 });
 
 router.patch("/receipt-vouchers/:id", async (req, res) => {
-  const { amount, date, accountId, reference, notes, customerName } = req.body;
+  const { amount, date, accountId, reference, notes, customerName, type } = req.body;
   const updates: Record<string, unknown> = {};
   if (amount !== undefined) updates.amount = String(amount);
   if (date !== undefined) updates.date = date;
@@ -57,20 +64,26 @@ router.patch("/receipt-vouchers/:id", async (req, res) => {
   if (reference !== undefined) updates.reference = reference;
   if (notes !== undefined) updates.notes = notes;
   if (customerName !== undefined) updates.customerName = customerName;
+  if (type !== undefined) updates.type = type === "deposit" ? "deposit" : "payment";
   const [v] = await db.update(receiptVouchersTable).set(updates).where(eq(receiptVouchersTable.id, Number(req.params.id))).returning();
   if (!v) return res.status(404).json({ error: "Not found" });
 
   const existingTxn = await db.select().from(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `receipt-voucher:${v.id}`)).limit(1);
   if (v.accountId) {
+    const isDeposit = (v as any).type === "deposit";
+    const patchCategory = isDeposit ? "عربون" : "سندات قبض";
+    const patchDescription = isDeposit
+      ? `عربون رقم ${v.voucherNumber}${v.customerName ? ` — ${v.customerName}` : ""}`
+      : `سند قبض رقم ${v.voucherNumber}${v.customerName ? ` — ${v.customerName}` : ""}`;
     if (existingTxn[0]) {
-      await db.update(accountTransactionsTable).set({ accountId: v.accountId, amount: String(v.amount), date: v.date, description: `سند قبض رقم ${v.voucherNumber}${v.customerName ? ` — ${v.customerName}` : ""}` }).where(eq(accountTransactionsTable.id, existingTxn[0].id));
+      await db.update(accountTransactionsTable).set({ accountId: v.accountId, amount: String(v.amount), date: v.date, description: patchDescription, category: patchCategory }).where(eq(accountTransactionsTable.id, existingTxn[0].id));
     } else {
       await db.insert(accountTransactionsTable).values({
         accountId: v.accountId,
         direction: "in",
         amount: String(v.amount),
-        description: `سند قبض رقم ${v.voucherNumber}${v.customerName ? ` — ${v.customerName}` : ""}`,
-        category: "سندات قبض",
+        description: patchDescription,
+        category: patchCategory,
         date: v.date,
         reference: `receipt-voucher:${v.id}`,
       });

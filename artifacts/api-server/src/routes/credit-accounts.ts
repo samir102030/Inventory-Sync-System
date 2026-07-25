@@ -113,21 +113,31 @@ router.get("/credit-accounts/balances", async (_req, res) => {
 
   const paidMap = new Map(custPaid.map(p => [p.customerId, Number(p.totalPaid)]));
 
-  const rows = custCredit
-    .filter(c => c.customerId !== null)
-    .map(c => {
-      const totalInvoiced = Number(c.totalInvoiced);
-      const totalPaid = paidMap.get(c.customerId) ?? 0;
-      // positive balance = they owe us (عليه فلوس)
-      // negative balance = we owe them (ليه فلوس - they overpaid)
-      return {
-        customerId: c.customerId!,
-        name: c.customerName ?? "بدون اسم",
-        totalInvoiced,
-        totalPaid,
-        balance: totalInvoiced - totalPaid,
-      };
-    })
+  // Build invoice map (customers with credit invoices)
+  const invoiceMap = new Map(
+    custCredit
+      .filter(c => c.customerId !== null)
+      .map(c => [c.customerId!, { name: c.customerName ?? "بدون اسم", totalInvoiced: Number(c.totalInvoiced) }])
+  );
+
+  // Include deposit-only customers (receipt vouchers but no credit invoice)
+  const depositOnlyIds = [...paidMap.keys()].filter(id => id !== null && !invoiceMap.has(id!)) as number[];
+  const depositCustomerNames: { id: number; name: string }[] = depositOnlyIds.length > 0
+    ? await db.select({ id: customersTable.id, name: customersTable.name })
+        .from(customersTable)
+        .where(sql`${customersTable.id} = ANY(ARRAY[${sql.raw(depositOnlyIds.join(","))}]::int[])`)
+    : [];
+  const depositNameMap = new Map(depositCustomerNames.map(c => [c.id, c.name]));
+
+  const allIds = new Set([...invoiceMap.keys(), ...depositOnlyIds]);
+
+  const rows = [...allIds].map(customerId => {
+    const inv = invoiceMap.get(customerId);
+    const totalInvoiced = inv?.totalInvoiced ?? 0;
+    const totalPaid = paidMap.get(customerId) ?? 0;
+    const name = inv?.name ?? depositNameMap.get(customerId) ?? "بدون اسم";
+    return { customerId, name, totalInvoiced, totalPaid, balance: totalInvoiced - totalPaid };
+  })
     .filter(r => Math.abs(r.balance) > 0.001)
     .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 

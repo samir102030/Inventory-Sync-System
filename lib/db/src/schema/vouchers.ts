@@ -11,6 +11,7 @@ export const receiptVouchersTable = pgTable("receipt_vouchers", {
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   date: date("date", { mode: "string" }).notNull(),
   accountId: integer("account_id").references(() => accountsTable.id),
+  type: text("type").notNull().default("payment"), // "payment" | "deposit"
   reference: text("reference"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
