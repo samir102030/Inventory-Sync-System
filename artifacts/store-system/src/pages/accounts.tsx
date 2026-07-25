@@ -63,6 +63,14 @@ export default function Accounts() {
   const [txnForm, setTxnForm] = useState({ amount: "", description: "", category: "", date: format(new Date(), "yyyy-MM-dd"), reference: "" });
   const [transferForm, setTransferForm] = useState({ fromAccountId: "", toAccountId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), notes: "" });
 
+  // Accounts import state
+  const [accImportOpen, setAccImportOpen] = useState(false);
+  const [accMappingOpen, setAccMappingOpen] = useState(false);
+  const [accExcelHeaders, setAccExcelHeaders] = useState<string[]>([]);
+  const [accExcelRows, setAccExcelRows] = useState<string[][]>([]);
+  const [accMapping, setAccMapping] = useState<Record<string, string>>({});
+  const accFileRef = useRef<HTMLInputElement>(null);
+
   // Banks state
   const [bankOpen, setBankOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
@@ -133,6 +141,21 @@ export default function Accounts() {
       setTransferForm({ fromAccountId: "", toAccountId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), notes: "" });
     },
     onError: (err: Error) => toast({ title: err.message || "حدث خطأ", variant: "destructive" }),
+  });
+
+  // ── Accounts bulk import mutation ──
+  const importAccounts = useMutation({
+    mutationFn: async (rows: object[]) => {
+      const r = await fetch(`${BASE}/accounts/bulk-import`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accounts: rows }) });
+      if (!r.ok) throw new Error("فشل الاستيراد");
+      return r.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      setAccMappingOpen(false); setAccImportOpen(false);
+      toast({ title: `تم الاستيراد: ${data.created} حساب${data.skipped ? ` (تخطي ${data.skipped})` : ""}` });
+    },
+    onError: () => toast({ title: "فشل الاستيراد", variant: "destructive" }),
   });
 
   // ── Banks queries & mutations ──
@@ -220,6 +243,64 @@ export default function Accounts() {
     importBanks.mutate(rows);
   }
 
+  // ── Accounts import helpers ──
+  const ACC_FIELD_LABELS: Record<string, string> = {
+    name: "اسم الحساب *", type: "النوع", initialBalance: "الرصيد الابتدائي", notes: "ملاحظات",
+  };
+
+  function downloadAccountTemplate() {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["اسم الحساب", "النوع", "الرصيد الابتدائي", "ملاحظات"],
+      ["فودافون كاش", "wallet", "5000", ""],
+      ["بنك القاهرة", "bank", "20000", "الحساب الرئيسي"],
+      ["الخزينة الرئيسية", "cash", "10000", ""],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "الحسابات");
+    // add notes sheet explaining types
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      ["قيم النوع المقبولة:"],
+      ["cash", "كاش"],
+      ["bank", "حساب بنكي"],
+      ["wallet", "محفظة إلكترونية"],
+      ["other", "أخرى"],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws2, "قيم النوع");
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "نموذج_الحسابات.xlsx"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleAccountFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return; e.target.value = "";
+    try {
+      const { headers, rows } = await parseExcelFile(file);
+      setAccExcelHeaders(headers); setAccExcelRows(rows);
+      const auto: Record<string, string> = {};
+      headers.forEach(h => {
+        if (/اسم الحساب|اسم|name/i.test(h)) auto.name = h;
+        else if (/نوع|type/i.test(h)) auto.type = h;
+        else if (/رصيد|balance/i.test(h)) auto.initialBalance = h;
+        else if (/ملاحظات|notes/i.test(h)) auto.notes = h;
+      });
+      setAccMapping(auto);
+      setAccImportOpen(false); setAccMappingOpen(true);
+    } catch { toast({ title: "تعذر قراءة الملف", variant: "destructive" }); }
+  }
+
+  function confirmAccountImport() {
+    if (!accMapping.name) { toast({ title: "يجب تحديد عمود اسم الحساب", variant: "destructive" }); return; }
+    const rows = accExcelRows.map(row => ({
+      name: row[accExcelHeaders.indexOf(accMapping.name)] || "",
+      type: accMapping.type ? row[accExcelHeaders.indexOf(accMapping.type)] : "cash",
+      initialBalance: accMapping.initialBalance ? Number(row[accExcelHeaders.indexOf(accMapping.initialBalance)]) || 0 : 0,
+      notes: accMapping.notes ? row[accExcelHeaders.indexOf(accMapping.notes)] : undefined,
+    }));
+    importAccounts.mutate(rows);
+  }
+
   const resetAccountForm = () => { setAccountForm({ name: "", type: "cash", color: "#3b82f6", initialBalance: "", notes: "" }); setEditingAccount(null); };
 
   const openEditAccount = (a: Account) => {
@@ -301,16 +382,23 @@ export default function Accounts() {
               إجمالي الأرصدة: <span className="font-bold text-green-600 text-base">{totalBalance.toFixed(2)} ج.م</span>
             </p>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => { const rows = accounts.map(a => [a.name, ACCOUNT_TYPES[a.type] ?? a.type, a.initialBalance, a.totalIn, a.totalOut, a.balance, a.notes ?? ""]); exportToExcel(["الاسم","النوع","الرصيد الأولي","إجمالي الوارد","إجمالي الصادر","الرصيد الحالي","ملاحظات"], rows, "accounts", "الحسابات"); }}>
-                <Download className="h-4 w-4 ml-2" />تصدير Excel
+              <Button variant="outline" size="sm" onClick={downloadAccountTemplate}>
+                <Download className="h-4 w-4 ml-1" />تحميل نموذج
               </Button>
-              <Button variant="outline" onClick={openTransferDialog} disabled={accounts.length < 2}>
-                <ArrowLeftRight className="h-4 w-4 ml-2" />ترحيل بين الخزائن
+              <Button variant="outline" size="sm" onClick={() => setAccImportOpen(true)}>
+                <Upload className="h-4 w-4 ml-1" />استيراد Excel
               </Button>
-              <Button onClick={() => { resetAccountForm(); setIsAccountDialog(true); }}>
-                <Plus className="h-4 w-4 ml-2" />إضافة حساب
+              <Button variant="outline" size="sm" onClick={() => { const rows = accounts.map(a => [a.name, ACCOUNT_TYPES[a.type] ?? a.type, a.initialBalance, a.totalIn, a.totalOut, a.balance, a.notes ?? ""]); exportToExcel(["الاسم","النوع","الرصيد الأولي","إجمالي الوارد","إجمالي الصادر","الرصيد الحالي","ملاحظات"], rows, "accounts", "الحسابات"); }}>
+                <Download className="h-4 w-4 ml-1" />تصدير Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={openTransferDialog} disabled={accounts.length < 2}>
+                <ArrowLeftRight className="h-4 w-4 ml-1" />ترحيل بين الخزائن
+              </Button>
+              <Button size="sm" onClick={() => { resetAccountForm(); setIsAccountDialog(true); }}>
+                <Plus className="h-4 w-4 ml-1" />إضافة حساب
               </Button>
             </div>
+            <input ref={accFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleAccountFile} />
           </div>
 
       {/* Accounts Grid */}
@@ -427,6 +515,64 @@ export default function Accounts() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Accounts Import Dialog ── */}
+      <Dialog open={accImportOpen} onOpenChange={setAccImportOpen}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader><DialogTitle>استيراد الحسابات من Excel</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">اختر ملف Excel يحتوي على بيانات الحسابات. يمكنك تحميل النموذج أولاً للتعرف على الأعمدة المطلوبة.</p>
+            <Button variant="outline" className="w-full" onClick={downloadAccountTemplate}>
+              <Download className="h-4 w-4 ml-2" />تحميل النموذج أولاً
+            </Button>
+            <Button className="w-full" onClick={() => accFileRef.current?.click()}>
+              <Upload className="h-4 w-4 ml-2" />اختيار ملف Excel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Accounts Mapping Dialog ── */}
+      <Dialog open={accMappingOpen} onOpenChange={setAccMappingOpen}>
+        <DialogContent className="max-w-lg" dir="rtl">
+          <DialogHeader><DialogTitle>ربط الأعمدة ({accExcelRows.length} صف)</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">حدد الأعمدة في الملف المقابلة لكل حقل.</p>
+            {Object.keys(ACC_FIELD_LABELS).map(f => (
+              <div key={f} className="flex items-center gap-3">
+                <Label className="w-36 shrink-0 text-sm">{ACC_FIELD_LABELS[f]}</Label>
+                <select
+                  className="flex-1 border rounded-md px-2 py-1.5 text-sm bg-background"
+                  value={accMapping[f] || ""}
+                  onChange={e => setAccMapping(m => ({ ...m, [f]: e.target.value }))}
+                >
+                  <option value="">— تجاهل —</option>
+                  {accExcelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+            ))}
+            {accMapping.type && (
+              <p className="text-xs text-muted-foreground bg-muted/40 rounded p-2">
+                قيم النوع المقبولة: <span className="font-mono">cash · bank · wallet · other</span>
+              </p>
+            )}
+            {accExcelRows.length > 0 && accMapping.name && (
+              <div className="rounded-md border p-3 bg-muted/30 text-sm space-y-1">
+                <p className="font-medium text-xs text-muted-foreground mb-1">معاينة أول صف:</p>
+                {Object.entries(accMapping).filter(([, v]) => v).map(([f, col]) => (
+                  <p key={f}><span className="text-muted-foreground">{ACC_FIELD_LABELS[f]}: </span>{accExcelRows[0]?.[accExcelHeaders.indexOf(col)] ?? "—"}</p>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" onClick={() => { setAccMappingOpen(false); setAccImportOpen(true); }}>رجوع</Button>
+            <Button onClick={confirmAccountImport} disabled={importAccounts.isPending}>
+              {importAccounts.isPending ? "جاري الاستيراد..." : `استيراد ${accExcelRows.length} صف`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit Account Dialog */}
       <Dialog open={isAccountDialog} onOpenChange={open => { if (!open) { setIsAccountDialog(false); resetAccountForm(); } }}>

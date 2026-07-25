@@ -32,6 +32,41 @@ router.get("/accounts", async (_req, res) => {
   })));
 });
 
+/* ── Bulk import ── */
+router.post("/accounts/bulk-import", async (req, res) => {
+  const { accounts } = req.body;
+  if (!Array.isArray(accounts) || !accounts.length)
+    return res.status(400).json({ error: "accounts array required" });
+
+  const results = { created: 0, skipped: 0 };
+  const valid = accounts.filter(a => a.name?.trim());
+  results.skipped += accounts.length - valid.length;
+
+  const rows = valid.map(a => ({
+    name: a.name.trim(),
+    type: ["cash","bank","wallet","other"].includes(a.type) ? a.type : "cash",
+    color: /^#[0-9a-fA-F]{6}$/.test(a.color ?? "") ? a.color : "#3b82f6",
+    initialBalance: a.initialBalance != null && !isNaN(Number(a.initialBalance))
+      ? String(Number(a.initialBalance)) : "0",
+    notes: a.notes || null,
+  }));
+
+  const BATCH = 100;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    try {
+      await db.insert(accountsTable).values(batch);
+      results.created += batch.length;
+    } catch {
+      for (const row of batch) {
+        try { await db.insert(accountsTable).values(row); results.created++; }
+        catch { results.skipped++; }
+      }
+    }
+  }
+  return res.json(results);
+});
+
 router.post("/accounts", async (req, res) => {
   const { name, type, color, initialBalance, notes } = req.body;
   if (!name) return res.status(400).json({ error: "name required" });
