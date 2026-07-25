@@ -90,6 +90,7 @@ const inventoryItems = [
 
 const crmItems = [
   { title: "العملاء", url: "/customers", icon: Users },
+  { title: "أرصدة الحسابات", url: "/balances", icon: HandCoins },
   { title: "رسائل واتساب", url: "/whatsapp", icon: MessageCircle },
 ];
 
