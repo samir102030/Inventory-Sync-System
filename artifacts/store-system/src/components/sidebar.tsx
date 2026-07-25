@@ -150,9 +150,9 @@ export function AppSidebar() {
       <SidebarContent>
         <NavGroup label="المبيعات" items={salesItems} location={location} />
         <NavGroup label="المشتريات" items={purchaseItems} location={location} />
+        <NavGroup label="العملاء" items={crmItems} location={location} />
         <NavGroup label="المالية" items={visibleFinanceItems} location={location} />
         <NavGroup label="المخزون" items={inventoryItems} location={location} />
-        <NavGroup label="العملاء" items={crmItems} location={location} />
         <NavGroup label="أخرى" items={otherItems} location={location} />
       </SidebarContent>
       <SidebarFooter className="border-t p-4">
