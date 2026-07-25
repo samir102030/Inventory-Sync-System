@@ -1,20 +1,22 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Eye, Receipt, Download, Search, UserPlus, X, ShoppingCart } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { Plus, Trash2, Eye, Receipt, Download, ChevronsUpDown, Check, UserPlus, ShoppingCart, X } from "lucide-react";
 import { exportToExcel } from "@/lib/excel";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 type Supplier = { id: number; name: string; phone?: string | null };
 type Product = { id: number; name: string; costPrice?: number | null; categoryId?: number; categoryName?: string | null; price?: number };
-type Category = { id: number; name: string };
 type Account = { id: number; name: string };
 type PurchaseItem = { productId: number; productName: string; quantity: number; unitCost: number; total: number };
 type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; tax: number; taxRate: number; date: string; paymentMethod?: string; accountId?: number | null; notes?: string | null; isTaxable?: number; createdAt: string };
@@ -22,22 +24,19 @@ type Purchase = { id: number; purchaseNumber: string; supplierName?: string | nu
 const BASE = "/api";
 const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
 
-/* ─── Searchable Product Combobox ─── */
+/* ─── Product Combobox (Popover+Command via Portal) ─── */
 function ProductCombobox({ products, value, onSelect }: {
   products: Product[];
   value: string;
   onSelect: (product: Product) => void;
 }) {
-  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
   const [catFilter, setCatFilter] = useState("all");
   const [minCost, setMinCost] = useState("");
   const [maxCost, setMaxCost] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   const selected = products.find(p => p.id === Number(value));
 
-  // unique categories from products
   const categories = useMemo(() => {
     const seen = new Map<number, string>();
     products.forEach(p => { if (p.categoryId && p.categoryName) seen.set(p.categoryId, p.categoryName); });
@@ -46,59 +45,40 @@ function ProductCombobox({ products, value, onSelect }: {
 
   const filtered = useMemo(() => {
     return products.filter(p => {
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
       if (catFilter !== "all" && String(p.categoryId) !== catFilter) return false;
-      const cost = p.costPrice ?? 0;
+      const cost = Number(p.costPrice ?? 0);
       if (minCost !== "" && cost < Number(minCost)) return false;
       if (maxCost !== "" && cost > Number(maxCost)) return false;
       return true;
     });
-  }, [products, search, catFilter, minCost, maxCost]);
+  }, [products, catFilter, minCost, maxCost]);
 
-  // close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const handleSelect = (p: Product) => {
-    onSelect(p);
-    setSearch("");
-    setOpen(false);
-  };
-
-  const clearSelection = () => { onSelect({ id: 0, name: "" }); setSearch(""); };
+  const hasFilters = catFilter !== "all" || minCost !== "" || maxCost !== "";
 
   return (
-    <div ref={ref} className="relative col-span-2">
-      {/* Selected display or search input */}
-      {selected && selected.id !== 0 ? (
-        <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
-          <span className="flex-1 text-sm font-medium">{selected.name}</span>
-          {selected.categoryName && <span className="text-xs text-muted-foreground bg-muted rounded px-1">{selected.categoryName}</span>}
-          <button type="button" onClick={clearSelection} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-text" onClick={() => setOpen(true)}>
-          <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <input
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            placeholder="ابحث عن منتج بالاسم..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-          />
-        </div>
-      )}
-
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute top-full mt-1 z-50 w-full rounded-lg border bg-popover shadow-lg">
-          {/* Filters bar */}
-          <div className="flex gap-2 p-2 border-b bg-muted/30">
+    <div className="col-span-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" role="combobox" aria-expanded={open}
+            className="w-full justify-between font-normal">
+            {selected ? (
+              <span className="flex items-center gap-2">
+                <span>{selected.name}</span>
+                {selected.categoryName && (
+                  <span className="text-xs bg-muted rounded px-1 text-muted-foreground">{selected.categoryName}</span>
+                )}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">ابحث عن منتج...</span>
+            )}
+            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[420px] p-0" align="start" side="bottom">
+          {/* Filter bar */}
+          <div className="flex items-center gap-2 p-2 border-b bg-muted/30">
             <Select value={catFilter} onValueChange={setCatFilter}>
-              <SelectTrigger className="h-7 text-xs flex-1">
+              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
                 <SelectValue placeholder="كل الأقسام" />
               </SelectTrigger>
               <SelectContent>
@@ -106,181 +86,148 @@ function ProductCombobox({ products, value, onSelect }: {
                 {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Input
-              className="h-7 text-xs w-20"
-              type="number"
-              placeholder="من"
-              value={minCost}
-              onChange={e => setMinCost(e.target.value)}
-            />
-            <Input
-              className="h-7 text-xs w-20"
-              type="number"
-              placeholder="إلى"
-              value={maxCost}
-              onChange={e => setMaxCost(e.target.value)}
-            />
-            {(catFilter !== "all" || minCost || maxCost) && (
-              <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setCatFilter("all"); setMinCost(""); setMaxCost(""); }}>
+            <Input className="h-7 text-xs w-20 shrink-0" type="number" placeholder="من" value={minCost} onChange={e => setMinCost(e.target.value)} />
+            <Input className="h-7 text-xs w-20 shrink-0" type="number" placeholder="إلى" value={maxCost} onChange={e => setMaxCost(e.target.value)} />
+            {hasFilters && (
+              <button type="button" onClick={() => { setCatFilter("all"); setMinCost(""); setMaxCost(""); }}
+                className="shrink-0 text-muted-foreground hover:text-foreground">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
-
-          {/* Products list */}
-          <div className="max-h-52 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">لا توجد منتجات</div>
-            ) : (
-              filtered.map(p => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-right"
-                  onClick={() => handleSelect(p)}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{p.name}</span>
-                    {p.categoryName && <span className="text-xs text-muted-foreground bg-muted rounded px-1">{p.categoryName}</span>}
-                  </div>
-                  <span className="text-xs text-muted-foreground ltr">{p.costPrice != null ? `${Number(p.costPrice).toFixed(2)} ج.م` : "—"}</span>
-                </button>
-              ))
-            )}
-          </div>
-          <div className="px-3 py-1.5 border-t text-xs text-muted-foreground">{filtered.length} منتج</div>
-        </div>
-      )}
+          <Command>
+            <CommandInput placeholder="اكتب اسم المنتج..." className="h-9" />
+            <CommandList>
+              <CommandEmpty>لا توجد منتجات مطابقة</CommandEmpty>
+              <CommandGroup>
+                {filtered.map(p => (
+                  <CommandItem key={p.id} value={p.name}
+                    onSelect={() => { onSelect(p); setOpen(false); }}
+                    className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Check className={cn("h-4 w-4 shrink-0", value === String(p.id) ? "opacity-100" : "opacity-0")} />
+                      <span>{p.name}</span>
+                      {p.categoryName && (
+                        <span className="text-xs bg-muted rounded px-1 text-muted-foreground">{p.categoryName}</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground ltr shrink-0">
+                      {p.costPrice != null ? `${Number(p.costPrice).toFixed(2)} ج.م` : "—"}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+            <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">
+              {filtered.length} منتج {hasFilters ? "(مفلتر)" : ""}
+            </div>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
 
-/* ─── Supplier Search + Quick-Add ─── */
-function SupplierSection({ suppliers, supplierId, supplierName, onSupplierSelect, onSupplierNameChange, onSupplierAdded }: {
+/* ─── Supplier Combobox (Popover+Command via Portal) ─── */
+function SupplierCombobox({ suppliers, value, onChange, onAdded }: {
   suppliers: Supplier[];
-  supplierId: string;
-  supplierName: string;
-  onSupplierSelect: (id: string, name: string) => void;
-  onSupplierNameChange: (name: string) => void;
-  onSupplierAdded: (s: Supplier) => void;
+  value: string;
+  onChange: (id: string, name: string) => void;
+  onAdded: (s: Supplier) => void;
 }) {
-  const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
+  const selected = suppliers.find(s => s.id === Number(value));
+
   const addMutation = useMutation({
-    mutationFn: (data: object) => fetch(`${BASE}/suppliers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: (data: object) =>
+      fetch(`${BASE}/suppliers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
     onSuccess: (s) => {
       qc.invalidateQueries({ queryKey: ["suppliers"] });
-      onSupplierAdded(s);
-      setShowAdd(false); setNewName(""); setNewPhone(""); setSearch(""); setOpen(false);
+      onAdded(s);
+      setShowAdd(false); setNewName(""); setNewPhone(""); setOpen(false);
       toast({ title: "تم إضافة المورد" });
     },
     onError: () => toast({ title: "خطأ في إضافة المورد", variant: "destructive" }),
   });
 
-  const selectedSupplier = suppliers.find(s => s.id === Number(supplierId));
-
-  const filtered = useMemo(() => {
-    if (!search) return suppliers;
-    const q = search.toLowerCase();
-    return suppliers.filter(s => s.name.toLowerCase().includes(q) || (s.phone && s.phone.includes(q)));
-  }, [suppliers, search]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const clearSupplier = () => { onSupplierSelect("", ""); setSearch(""); };
-
   return (
-    <div className="col-span-2 space-y-2">
-      <Label>المورد</Label>
-      <div ref={ref} className="relative">
-        {selectedSupplier ? (
-          <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
-            <div className="flex-1">
-              <span className="text-sm font-medium">{selectedSupplier.name}</span>
-              {selectedSupplier.phone && <span className="mr-2 text-xs text-muted-foreground">{selectedSupplier.phone}</span>}
-            </div>
-            <button type="button" onClick={clearSupplier} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-text" onClick={() => setOpen(true)}>
-            <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <input
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              placeholder="ابحث باسم المورد أو رقم الهاتف..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); onSupplierNameChange(e.target.value); setOpen(true); }}
-              onFocus={() => setOpen(true)}
-            />
-            {search && <button type="button" onClick={() => { setSearch(""); onSupplierNameChange(""); }}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}
-          </div>
-        )}
-
-        {open && !selectedSupplier && (
-          <div className="absolute top-full mt-1 z-50 w-full rounded-lg border bg-popover shadow-lg">
-            <div className="max-h-44 overflow-y-auto">
-              {filtered.length === 0 && !search ? (
-                <div className="py-4 text-center text-sm text-muted-foreground">ابدأ الكتابة للبحث</div>
-              ) : filtered.length === 0 ? (
-                <div className="py-3 text-center text-sm text-muted-foreground">لم يُعثر على مورد بهذا الاسم أو الرقم</div>
-              ) : (
-                filtered.map(s => (
-                  <button key={s.id} type="button"
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/60 text-right"
-                    onClick={() => { onSupplierSelect(String(s.id), s.name); setSearch(""); setOpen(false); }}>
-                    <span className="font-medium">{s.name}</span>
+    <Popover open={open} onOpenChange={o => { setOpen(o); if (!o) { setShowAdd(false); setNewName(""); setNewPhone(""); } }}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open}
+          className="w-full justify-between font-normal">
+          {selected ? (
+            <span className="flex items-center gap-2">
+              <span>{selected.name}</span>
+              {selected.phone && <span className="text-xs text-muted-foreground">{selected.phone}</span>}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">ابحث باسم المورد أو رقم الهاتف...</span>
+          )}
+          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[360px] p-0" align="start" side="bottom">
+        {!showAdd ? (
+          <Command filter={(value, search) => {
+            const supplier = suppliers.find(s => s.name === value || String(s.id) === value);
+            if (!supplier) return 0;
+            const q = search.toLowerCase();
+            if (supplier.name.toLowerCase().includes(q)) return 1;
+            if (supplier.phone && supplier.phone.includes(q)) return 1;
+            return 0;
+          }}>
+            <CommandInput placeholder="الاسم أو رقم الهاتف..." className="h-9" />
+            <CommandList>
+              <CommandEmpty>
+                <span className="text-muted-foreground text-sm">لم يُعثر على مورد</span>
+              </CommandEmpty>
+              <CommandGroup>
+                {suppliers.map(s => (
+                  <CommandItem key={s.id} value={s.name}
+                    onSelect={() => { onChange(String(s.id), s.name); setOpen(false); }}
+                    className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Check className={cn("h-4 w-4 shrink-0", value === String(s.id) ? "opacity-100" : "opacity-0")} />
+                      <span>{s.name}</span>
+                    </div>
                     {s.phone && <span className="text-xs text-muted-foreground">{s.phone}</span>}
-                  </button>
-                ))
-              )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+            <CommandSeparator />
+            <div className="p-1">
+              <button type="button"
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-muted rounded-sm"
+                onClick={() => setShowAdd(true)}>
+                <UserPlus className="h-4 w-4" />
+                إضافة مورد جديد
+              </button>
             </div>
-            <div className="border-t p-2">
-              {!showAdd ? (
-                <button type="button"
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-muted/60 rounded"
-                  onClick={() => { setShowAdd(true); setNewName(search); }}>
-                  <UserPlus className="h-4 w-4" />
-                  إضافة مورد جديد {search && `"${search}"`}
-                </button>
-              ) : (
-                <div className="space-y-2 p-1">
-                  <Input className="h-8 text-sm" placeholder="اسم المورد *" value={newName} onChange={e => setNewName(e.target.value)} />
-                  <Input className="h-8 text-sm" placeholder="رقم الهاتف (اختياري)" value={newPhone} onChange={e => setNewPhone(e.target.value)} />
-                  <div className="flex gap-2">
-                    <Button type="button" size="sm" className="flex-1 h-8"
-                      disabled={!newName.trim() || addMutation.isPending}
-                      onClick={() => addMutation.mutate({ name: newName.trim(), phone: newPhone.trim() || undefined })}>
-                      حفظ
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setShowAdd(false)}>إلغاء</Button>
-                  </div>
-                </div>
-              )}
+          </Command>
+        ) : (
+          <div className="p-3 space-y-2">
+            <p className="text-sm font-medium mb-2">إضافة مورد جديد</p>
+            <Input placeholder="اسم المورد *" value={newName} onChange={e => setNewName(e.target.value)} />
+            <Input placeholder="رقم الهاتف (اختياري)" value={newPhone} onChange={e => setNewPhone(e.target.value)} />
+            <div className="flex gap-2 pt-1">
+              <Button type="button" className="flex-1" size="sm"
+                disabled={!newName.trim() || addMutation.isPending}
+                onClick={() => addMutation.mutate({ name: newName.trim(), phone: newPhone.trim() || undefined })}>
+                حفظ المورد
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowAdd(false)}>إلغاء</Button>
             </div>
           </div>
         )}
-      </div>
-
-      {/* Manual supplier name fallback if no registered supplier chosen */}
-      {!selectedSupplier && !search && (
-        <Input
-          className="text-sm"
-          value={supplierName}
-          onChange={e => onSupplierNameChange(e.target.value)}
-          placeholder="أو اكتب اسم مورد غير مسجل مباشرة..."
-        />
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -310,7 +257,8 @@ export default function Purchases() {
   const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ["accounts"], queryFn: () => fetchJSON(`${BASE}/accounts`) });
 
   const createMutation = useMutation({
-    mutationFn: (data: object) => fetch(`${BASE}/purchases`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: (data: object) =>
+      fetch(`${BASE}/purchases`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
     onSuccess: () => {
       toast({ title: "تم تسجيل المشتريات" });
       qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -323,8 +271,13 @@ export default function Purchases() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/purchases/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
-    onSuccess: () => { toast({ title: "تم حذف الطلب" }); qc.invalidateQueries({ queryKey: ["purchases"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); },
+    mutationFn: (id: number) =>
+      fetch(`${BASE}/purchases/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+    onSuccess: () => {
+      toast({ title: "تم حذف الطلب" });
+      qc.invalidateQueries({ queryKey: ["purchases"] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+    },
   });
 
   const resetForm = () => {
@@ -335,9 +288,8 @@ export default function Purchases() {
   };
 
   const handleProductSelect = (product: Product) => {
-    if (!product.id) { setSelectedProductId(""); return; }
     setSelectedProductId(String(product.id));
-    if (product.costPrice != null) setItemCost(String(product.costPrice));
+    if (product.costPrice != null) setItemCost(String(Number(product.costPrice)));
   };
 
   const addItem = () => {
@@ -346,13 +298,11 @@ export default function Purchases() {
     if (!product) return;
     const qty = parseFloat(itemQty);
     const cost = parseFloat(itemCost);
-    // if same product exists, update quantity instead
     const existingIdx = items.findIndex(it => it.productId === product.id);
     if (existingIdx >= 0) {
       setItems(prev => prev.map((it, i) => i === existingIdx
         ? { ...it, quantity: it.quantity + qty, unitCost: cost, total: (it.quantity + qty) * cost }
-        : it
-      ));
+        : it));
     } else {
       setItems(prev => [...prev, { productId: product.id, productName: product.name, quantity: qty, unitCost: cost, total: qty * cost }]);
     }
@@ -365,7 +315,7 @@ export default function Purchases() {
     e.preventDefault();
     if (!items.length) { toast({ title: "أضف منتجاً على الأقل", variant: "destructive" }); return; }
     if (paymentMethod === "cash" && !accountId) {
-      toast({ title: "الرجاء اختيار الحساب / الخزينة التي سيُصرف منها المبلغ", variant: "destructive" }); return;
+      toast({ title: "الرجاء اختيار الحساب / الخزينة", variant: "destructive" }); return;
     }
     if (paymentMethod === "credit" && !supplierId) {
       toast({ title: "الرجاء اختيار المورد المسجل للمشتريات الآجلة", variant: "destructive" }); return;
@@ -458,16 +408,27 @@ export default function Purchases() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
 
-            {/* Supplier + Date + Notes + Payment */}
+            {/* Supplier + meta */}
             <div className="grid grid-cols-2 gap-4">
-              <SupplierSection
-                suppliers={suppliers}
-                supplierId={supplierId}
-                supplierName={supplierName}
-                onSupplierSelect={(id, name) => { setSupplierId(id); setSupplierName(name); }}
-                onSupplierNameChange={setSupplierName}
-                onSupplierAdded={(s) => { setSupplierId(String(s.id)); setSupplierName(s.name); }}
-              />
+              {/* Supplier — spans full width */}
+              <div className="col-span-2 space-y-2">
+                <Label>المورد</Label>
+                <SupplierCombobox
+                  suppliers={suppliers}
+                  value={supplierId}
+                  onChange={(id, name) => { setSupplierId(id); setSupplierName(name); }}
+                  onAdded={(s) => { setSupplierId(String(s.id)); setSupplierName(s.name); }}
+                />
+                {!supplierId && (
+                  <Input
+                    className="text-sm mt-1"
+                    value={supplierName}
+                    onChange={e => setSupplierName(e.target.value)}
+                    placeholder="أو اكتب اسم مورد غير مسجل مباشرة..."
+                  />
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label>التاريخ *</Label>
                 <Input type="date" value={date} onChange={e => setDate(e.target.value)} required />
@@ -497,9 +458,9 @@ export default function Purchases() {
               )}
             </div>
 
-            {/* Tax section */}
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
-              <div className="flex items-center gap-3">
+            {/* Tax */}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+              <div className="flex items-center gap-2">
                 <Receipt className="h-4 w-4 text-amber-600" />
                 <span className="font-semibold text-amber-800">نسبة الضريبة على الفاتورة</span>
               </div>
@@ -515,7 +476,7 @@ export default function Purchases() {
               {taxRate > 0 && <p className="text-xs text-amber-600">سيُحفظ سعر التكلفة للمنتجات شاملاً الضريبة تلقائياً</p>}
             </div>
 
-            {/* Add product card */}
+            {/* Add product */}
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-base">إضافة منتج</CardTitle></CardHeader>
               <CardContent>
@@ -528,14 +489,15 @@ export default function Purchases() {
                   <Input type="number" min="0.001" step="0.001" placeholder="الكمية" value={itemQty} onChange={e => setItemQty(e.target.value)} />
                   <Input type="number" min="0" step="0.01" placeholder="سعر التكلفة" value={itemCost} onChange={e => setItemCost(e.target.value)} />
                 </div>
-                <Button type="button" variant="outline" className="mt-2 w-full" onClick={addItem}
-                  disabled={!selectedProductId || !itemQty || !itemCost}>
+                <Button type="button" variant="outline" className="mt-2 w-full"
+                  disabled={!selectedProductId || !itemQty || !itemCost}
+                  onClick={addItem}>
                   + إضافة للطلب
                 </Button>
               </CardContent>
             </Card>
 
-            {/* Items table */}
+            {/* Items table + summary */}
             {items.length > 0 && (
               <div className="rounded-lg border overflow-hidden">
                 <Table>
@@ -565,26 +527,26 @@ export default function Purchases() {
                   </TableBody>
                 </Table>
 
-                {/* Summary bar */}
-                <div className="bg-muted/40 border-t px-4 py-3 space-y-1.5">
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>عدد الأصناف</span>
-                    <span className="font-medium text-foreground">{items.length} صنف</span>
+                {/* Summary */}
+                <div className="bg-muted/40 border-t divide-y">
+                  <div className="flex justify-between items-center px-4 py-2 text-sm">
+                    <span className="text-muted-foreground">عدد الأصناف</span>
+                    <span className="font-medium">{items.length} صنف</span>
                   </div>
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>المجموع الفرعي</span>
-                    <span className="font-medium text-foreground">{subtotalAmount.toFixed(2)} ج.م</span>
+                  <div className="flex justify-between items-center px-4 py-2 text-sm">
+                    <span className="text-muted-foreground">المجموع الفرعي</span>
+                    <span className="font-medium">{subtotalAmount.toFixed(2)} ج.م</span>
                   </div>
                   {taxRate > 0 && (
-                    <div className="flex justify-between text-sm text-amber-700">
+                    <div className="flex justify-between items-center px-4 py-2 text-sm text-amber-700">
                       <span>الضريبة ({taxRate}%)</span>
                       <span className="font-medium">{taxAmount.toFixed(2)} ج.م</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center pt-1.5 border-t">
-                    <div className="flex items-center gap-1.5 text-base font-bold">
+                  <div className="flex justify-between items-center px-4 py-3 bg-blue-50">
+                    <div className="flex items-center gap-2">
                       <ShoppingCart className="h-4 w-4 text-blue-600" />
-                      <span>الإجمالي الكلي</span>
+                      <span className="font-bold text-base">الإجمالي الكلي</span>
                     </div>
                     <span className="text-xl font-bold text-blue-600">{totalAmount.toFixed(2)} ج.م</span>
                   </div>
@@ -592,7 +554,7 @@ export default function Purchases() {
               </div>
             )}
 
-            <div className="flex justify-end gap-2 mt-4">
+            <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>إلغاء</Button>
               <Button type="submit" disabled={createMutation.isPending}>تسجيل الطلب</Button>
             </div>
@@ -612,7 +574,9 @@ export default function Purchases() {
               </div>
               <div className="rounded-lg border overflow-hidden">
                 <Table>
-                  <TableHeader><TableRow><TableHead>المنتج</TableHead><TableHead>الكمية</TableHead><TableHead>سعر التكلفة</TableHead><TableHead>الإجمالي</TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow><TableHead>المنتج</TableHead><TableHead>الكمية</TableHead><TableHead>سعر التكلفة</TableHead><TableHead>الإجمالي</TableHead></TableRow>
+                  </TableHeader>
                   <TableBody>
                     {viewPurchase.items.map((item, i) => (
                       <TableRow key={i}>
@@ -624,16 +588,16 @@ export default function Purchases() {
                     ))}
                   </TableBody>
                 </Table>
-                <div className="bg-muted/40 border-t px-4 py-3 space-y-1">
+                <div className="bg-muted/40 border-t divide-y">
                   {viewPurchase.taxRate > 0 && (
-                    <div className="flex justify-between text-sm text-amber-700">
+                    <div className="flex justify-between items-center px-4 py-2 text-sm text-amber-700">
                       <span>ضريبة {viewPurchase.taxRate}%</span>
                       <span className="font-semibold">{viewPurchase.tax?.toFixed(2)} ج.م</span>
                     </div>
                   )}
-                  <div className="flex justify-between font-bold text-blue-600 text-base pt-1 border-t">
-                    <span>الإجمالي شامل الضريبة</span>
-                    <span>{viewPurchase.total.toFixed(2)} ج.م</span>
+                  <div className="flex justify-between items-center px-4 py-3 bg-blue-50">
+                    <span className="font-bold text-base">الإجمالي شامل الضريبة</span>
+                    <span className="text-xl font-bold text-blue-600">{viewPurchase.total.toFixed(2)} ج.م</span>
                   </div>
                 </div>
               </div>
