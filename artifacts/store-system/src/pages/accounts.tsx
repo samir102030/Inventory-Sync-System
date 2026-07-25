@@ -426,25 +426,30 @@ export default function Accounts() {
           [...accounts].sort((a, b) => Number(b.pinned) - Number(a.pinned)).map(account => (
             <Card
               key={account.id}
-              className={`cursor-pointer transition-all hover:shadow-md ${selectedAccountId === account.id ? "ring-2 ring-primary shadow-md" : ""} ${account.pinned ? "border-amber-400 dark:border-amber-500" : ""}`}
+              className={`relative cursor-pointer transition-all hover:shadow-md ${selectedAccountId === account.id ? "ring-2 ring-primary shadow-md" : ""} ${account.pinned ? "border-amber-400 dark:border-amber-500" : ""}`}
               onClick={() => setSelectedAccountId(prev => prev === account.id ? null : account.id)}
             >
-              <CardHeader className="pb-2">
+              {/* Pin button — top-left corner, always visible */}
+              <button
+                onClick={e => { e.stopPropagation(); togglePin.mutate(account); }}
+                title={account.pinned ? "إلغاء التثبيت" : "تثبيت الحساب"}
+                className={`absolute top-2 left-2 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors
+                  ${account.pinned
+                    ? "bg-amber-100 text-amber-700 border border-amber-400 hover:bg-amber-200"
+                    : "bg-muted text-muted-foreground border border-border hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300"
+                  }`}
+              >
+                <Pin className={`h-3 w-3 ${account.pinned ? "fill-amber-500 text-amber-500" : ""}`} />
+                {account.pinned ? "مثبت" : "تثبيت"}
+              </button>
+
+              <CardHeader className="pb-2 pt-8">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: account.color }} />
                     <CardTitle className="text-base truncate">{account.name}</CardTitle>
-                    {account.pinned && <Pin className="h-3 w-3 text-amber-500 fill-amber-400 flex-shrink-0" />}
                   </div>
                   <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                    <Button
-                      variant="ghost" size="icon"
-                      className={`h-7 w-7 ${account.pinned ? "text-amber-500" : "text-muted-foreground"}`}
-                      title={account.pinned ? "إلغاء التثبيت" : "تثبيت الحساب"}
-                      onClick={() => togglePin.mutate(account)}
-                    >
-                      {account.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
-                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditAccount(account)}><Edit className="h-3 w-3" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("حذف الحساب؟")) deleteAccount.mutate(account.id); }}><Trash2 className="h-3 w-3" /></Button>
                   </div>
