@@ -36,13 +36,13 @@ export default function PaymentVouchers() {
 
   const createMutation = useMutation({
     mutationFn: (data: object) => fetch(`${BASE}/payment-vouchers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: () => { toast({ title: "تم تسجيل سند الصرف" }); qc.invalidateQueries({ queryKey: ["payment-vouchers"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); setIsDialogOpen(false); resetForm(); },
+    onSuccess: () => { toast({ title: "تم تسجيل سند الصرف" }); qc.invalidateQueries({ queryKey: ["payment-vouchers"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["supplier-balances"] }); setIsDialogOpen(false); resetForm(); },
     onError: () => toast({ title: "حدث خطأ", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => fetch(`${BASE}/payment-vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
-    onSuccess: () => { toast({ title: "تم حذف السند" }); qc.invalidateQueries({ queryKey: ["payment-vouchers"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); },
+    onSuccess: () => { toast({ title: "تم حذف السند" }); qc.invalidateQueries({ queryKey: ["payment-vouchers"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["supplier-balances"] }); },
   });
 
   const resetForm = () => setFormData({ supplierId: "", paidTo: "", category: "supplier", amount: "", date: format(new Date(), "yyyy-MM-dd"), accountId: accounts[0] ? String(accounts[0].id) : "", reference: "", notes: "" });

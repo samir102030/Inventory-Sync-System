@@ -40,6 +40,7 @@ import Jam3iyyat from "@/pages/jam3iyyat";
 import TaxInvoices from "@/pages/tax-invoices";
 import CreditCards from "@/pages/credit-cards";
 import Balances from "@/pages/balances";
+import SupplierBalances from "@/pages/supplier-balances";
 
 const queryClient = new QueryClient();
 
@@ -101,6 +102,7 @@ function Router() {
       <Route path="/tax-invoices"><ProtectedRoute component={TaxInvoices} /></Route>
       <Route path="/credit-cards"><ProtectedRoute component={CreditCards} /></Route>
       <Route path="/balances"><ProtectedRoute component={Balances} /></Route>
+      <Route path="/supplier-balances"><ProtectedRoute component={SupplierBalances} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

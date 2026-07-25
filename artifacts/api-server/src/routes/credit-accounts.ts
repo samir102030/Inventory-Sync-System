@@ -89,6 +89,54 @@ router.get("/credit-accounts/suppliers", async (_req, res) => {
   return res.json(rows);
 });
 
+/* ── Supplier full balances: opening + credit purchases − payments ── */
+router.get("/credit-accounts/supplier-balances", async (_req, res) => {
+  // All registered suppliers with opening balance
+  const allSuppliers = await db
+    .select({ id: suppliersTable.id, name: suppliersTable.name, openingBalance: suppliersTable.openingBalance })
+    .from(suppliersTable);
+
+  // Credit purchases per supplier
+  const creditPurchases = await db
+    .select({
+      supplierId: purchasesTable.supplierId,
+      total: sql<string>`COALESCE(SUM(${purchasesTable.total}), 0)`,
+    })
+    .from(purchasesTable)
+    .where(eq(purchasesTable.paymentMethod, "credit"))
+    .groupBy(purchasesTable.supplierId);
+  const purchaseMap = new Map(creditPurchases.map(p => [p.supplierId, Number(p.total)]));
+
+  // Payment vouchers per supplier
+  const payments = await db
+    .select({
+      supplierId: paymentVouchersTable.supplierId,
+      totalPaid: sql<string>`COALESCE(SUM(${paymentVouchersTable.amount}), 0)`,
+    })
+    .from(paymentVouchersTable)
+    .where(sql`${paymentVouchersTable.supplierId} IS NOT NULL`)
+    .groupBy(paymentVouchersTable.supplierId);
+  const paidMap = new Map(payments.map(p => [p.supplierId, Number(p.totalPaid)]));
+
+  const rows = allSuppliers
+    .map(s => {
+      const openingBalance = Number(s.openingBalance ?? 0);
+      const totalPurchases = purchaseMap.get(s.id) ?? 0;
+      const totalPaid = paidMap.get(s.id) ?? 0;
+      // balance > 0 = we owe them (ليهم فلوس)
+      // balance < 0 = they owe us / we overpaid
+      const balance = openingBalance + totalPurchases - totalPaid;
+      return { supplierId: s.id, supplierName: s.name, openingBalance, totalPurchases, totalPaid, balance };
+    })
+    .filter(r => Math.abs(r.balance) > 0.001)
+    .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+
+  const totalOwedToSuppliers = rows.filter(r => r.balance > 0).reduce((s, r) => s + r.balance, 0);
+  const totalOwedBySuppliers = rows.filter(r => r.balance < 0).reduce((s, r) => s + Math.abs(r.balance), 0);
+
+  return res.json({ rows, totalOwedToSuppliers, totalOwedBySuppliers });
+});
+
 /* ── Customer balances: positive = they owe us, negative = we owe them ── */
 router.get("/credit-accounts/balances", async (_req, res) => {
   const custCredit = await db

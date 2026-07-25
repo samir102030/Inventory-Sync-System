@@ -62,6 +62,7 @@ const salesItems = [
 
 const purchaseItems = [
   { title: "الموردون", url: "/suppliers", icon: Truck },
+  { title: "أرصدة الموردين", url: "/supplier-balances", icon: HandCoins },
   { title: "المشتريات", url: "/purchases", icon: ShoppingBag },
 ];
 
