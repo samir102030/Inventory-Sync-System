@@ -14,8 +14,7 @@
 
 ## Default Login Credentials
 
-- **Admin:** username: `admin` / password: `admin123`
-- **Cashier:** username: `cashier` / password: `cashier123`
+Initial passwords are randomly generated at seed time and printed once to the seed script's stdout. There are no hardcoded default passwords. Set `ADMIN_PASSWORD` and `CASHIER_PASSWORD` environment variables before running the seed script if you want to specify them explicitly.
 
 ## Stack
 

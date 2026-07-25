@@ -1,20 +1,30 @@
 import { db, usersTable, categoriesTable, productsTable, customersTable, invoiceSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
+
+function generatePassword(): string {
+  return randomBytes(12).toString("base64url");
+}
 
 async function seed() {
   console.log("Seeding database...");
 
-  const adminHash = await bcrypt.hash("admin123", 10);
-  const cashierHash = await bcrypt.hash("cashier123", 10);
-
   const existingAdmin = await db.select().from(usersTable).where(eq(usersTable.username, "admin")).limit(1);
   if (!existingAdmin.length) {
+    const adminPassword = process.env.ADMIN_PASSWORD || generatePassword();
+    const cashierPassword = process.env.CASHIER_PASSWORD || generatePassword();
+    const adminHash = await bcrypt.hash(adminPassword, 10);
+    const cashierHash = await bcrypt.hash(cashierPassword, 10);
     await db.insert(usersTable).values([
       { username: "admin", passwordHash: adminHash, name: "مدير النظام", role: "admin" },
       { username: "cashier", passwordHash: cashierHash, name: "أحمد الكاشير", role: "cashier" },
     ]);
     console.log("Users created");
+    console.log("=== INITIAL CREDENTIALS (save these now) ===");
+    console.log(`  admin    password: ${adminPassword}`);
+    console.log(`  cashier  password: ${cashierPassword}`);
+    console.log("============================================");
   }
 
   const existingCats = await db.select().from(categoriesTable).limit(1);
