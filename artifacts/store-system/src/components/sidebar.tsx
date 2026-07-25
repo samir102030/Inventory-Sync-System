@@ -68,7 +68,6 @@ const purchaseItems = [
 ];
 
 const financeItems = [
-  { title: "البنوك", url: "/banks", icon: Building },
   { title: "الخزينة والحسابات", url: "/accounts", icon: Landmark },
   { title: "حسابات الآجل", url: "/credit-accounts", icon: HandCoins },
   { title: "سندات القبض", url: "/receipt-vouchers", icon: ArrowDownCircle },

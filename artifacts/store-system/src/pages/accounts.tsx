@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet, ArrowLeftRight, Download } from "lucide-react";
-import { exportToExcel } from "@/lib/excel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Edit, X, Wallet, ArrowLeftRight, Download, Upload, Building, Pencil } from "lucide-react";
+import { exportToExcel, parseExcelFile } from "@/lib/excel";
+import * as XLSX from "@e965/xlsx";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -39,6 +41,16 @@ const TXN_CATEGORIES = [
   "مبيعات", "مشتريات", "مصروفات", "رواتب", "إيجار", "تحويل بين حسابات", "إيداع", "سحب", "أخرى"
 ];
 
+type Bank = {
+  id: number; name: string; accountNumber?: string; accountName?: string;
+  branch?: string; balance: number; notes?: string; createdAt: string;
+};
+type BankForm = { name: string; accountNumber: string; accountName: string; branch: string; balance: string; notes: string; };
+const emptyBank: BankForm = { name: "", accountNumber: "", accountName: "", branch: "", balance: "0", notes: "" };
+const BANK_FIELD_LABELS: Record<string, string> = {
+  name: "اسم البنك *", accountNumber: "رقم الحساب", accountName: "اسم الحساب", branch: "الفرع", balance: "الرصيد", notes: "ملاحظات",
+};
+
 export default function Accounts() {
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [isAccountDialog, setIsAccountDialog] = useState(false);
@@ -50,6 +62,17 @@ export default function Accounts() {
   const [accountForm, setAccountForm] = useState({ name: "", type: "cash", color: "#3b82f6", initialBalance: "", notes: "" });
   const [txnForm, setTxnForm] = useState({ amount: "", description: "", category: "", date: format(new Date(), "yyyy-MM-dd"), reference: "" });
   const [transferForm, setTransferForm] = useState({ fromAccountId: "", toAccountId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), notes: "" });
+
+  // Banks state
+  const [bankOpen, setBankOpen] = useState(false);
+  const [editingBank, setEditingBank] = useState<Bank | null>(null);
+  const [bankForm, setBankForm] = useState<BankForm>(emptyBank);
+  const [bankImportOpen, setBankImportOpen] = useState(false);
+  const [bankMappingOpen, setBankMappingOpen] = useState(false);
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [excelRows, setExcelRows] = useState<string[][]>([]);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const bankFileRef = useRef<HTMLInputElement>(null);
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -112,6 +135,91 @@ export default function Accounts() {
     onError: (err: Error) => toast({ title: err.message || "حدث خطأ", variant: "destructive" }),
   });
 
+  // ── Banks queries & mutations ──
+  const { data: banks = [], isLoading: banksLoading } = useQuery<Bank[]>({
+    queryKey: ["banks"],
+    queryFn: () => fetchJSON(`${BASE}/banks`),
+  });
+
+  const saveBank = useMutation({
+    mutationFn: async (form: BankForm) => {
+      const url = editingBank ? `${BASE}/banks/${editingBank.id}` : `${BASE}/banks`;
+      const r = await fetch(url, { method: editingBank ? "PATCH" : "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, balance: Number(form.balance) || 0 }) });
+      if (!r.ok) throw new Error("فشل الحفظ");
+      return r.json();
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["banks"] }); setBankOpen(false); toast({ title: editingBank ? "تم التعديل" : "تمت الإضافة" }); },
+    onError: () => toast({ title: "خطأ في الحفظ", variant: "destructive" }),
+  });
+
+  const deleteBank = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/banks/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["banks"] }); toast({ title: "تم الحذف" }); },
+  });
+
+  const importBanks = useMutation({
+    mutationFn: async (rows: object[]) => {
+      const r = await fetch(`${BASE}/banks/bulk-import`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ banks: rows }) });
+      if (!r.ok) throw new Error("فشل الاستيراد");
+      return r.json();
+    },
+    onSuccess: (data) => { qc.invalidateQueries({ queryKey: ["banks"] }); setBankMappingOpen(false); setBankImportOpen(false); toast({ title: `تم الاستيراد: ${data.created} بنك${data.skipped ? ` (تخطي ${data.skipped})` : ""}` }); },
+    onError: () => toast({ title: "فشل الاستيراد", variant: "destructive" }),
+  });
+
+  function openAddBank() { setEditingBank(null); setBankForm(emptyBank); setBankOpen(true); }
+  function openEditBank(b: Bank) { setEditingBank(b); setBankForm({ name: b.name, accountNumber: b.accountNumber || "", accountName: b.accountName || "", branch: b.branch || "", balance: String(b.balance), notes: b.notes || "" }); setBankOpen(true); }
+
+  function downloadBankTemplate() {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["اسم البنك", "رقم الحساب", "اسم الحساب", "الفرع", "الرصيد", "ملاحظات"],
+      ["بنك مصر", "1234567890", "شركة المثال", "فرع وسط البلد", "50000", ""],
+      ["البنك الأهلي", "0987654321", "أحمد محمد", "فرع المعادي", "0", ""],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "البنوك");
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "نموذج_البنوك.xlsx"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleBankFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return; e.target.value = "";
+    try {
+      const { headers, rows } = await parseExcelFile(file);
+      setExcelHeaders(headers); setExcelRows(rows);
+      const autoMap: Record<string, string> = {};
+      Object.keys(BANK_FIELD_LABELS).forEach(f => {
+        const match = headers.find(h => {
+          if (f === "name") return /اسم البنك|اسم|name/i.test(h);
+          if (f === "accountNumber") return /رقم الحساب|رقم|account.?number/i.test(h);
+          if (f === "accountName") return /اسم الحساب|account.?name/i.test(h);
+          if (f === "branch") return /فرع|branch/i.test(h);
+          if (f === "balance") return /رصيد|balance/i.test(h);
+          if (f === "notes") return /ملاحظات|notes/i.test(h);
+          return false;
+        });
+        if (match) autoMap[f] = match;
+      });
+      setMapping(autoMap); setBankImportOpen(false); setBankMappingOpen(true);
+    } catch { toast({ title: "تعذر قراءة الملف", variant: "destructive" }); }
+  }
+
+  function confirmBankImport() {
+    if (!mapping.name) { toast({ title: "يجب تحديد عمود اسم البنك", variant: "destructive" }); return; }
+    const rows = excelRows.map(row => ({
+      name: row[excelHeaders.indexOf(mapping.name)] || "",
+      accountNumber: mapping.accountNumber ? row[excelHeaders.indexOf(mapping.accountNumber)] : undefined,
+      accountName: mapping.accountName ? row[excelHeaders.indexOf(mapping.accountName)] : undefined,
+      branch: mapping.branch ? row[excelHeaders.indexOf(mapping.branch)] : undefined,
+      balance: mapping.balance ? Number(row[excelHeaders.indexOf(mapping.balance)]) || 0 : 0,
+      notes: mapping.notes ? row[excelHeaders.indexOf(mapping.notes)] : undefined,
+    }));
+    importBanks.mutate(rows);
+  }
+
   const resetAccountForm = () => { setAccountForm({ name: "", type: "cash", color: "#3b82f6", initialBalance: "", notes: "" }); setEditingAccount(null); };
 
   const openEditAccount = (a: Account) => {
@@ -170,31 +278,40 @@ export default function Accounts() {
   };
 
   const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
+  const totalBankBalance = banks.reduce((s, b) => s + b.balance, 0);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">الخزينة والحسابات</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            إجمالي الأرصدة: <span className="font-bold text-green-600 text-base">{totalBalance.toFixed(2)} ج.م</span>
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => { const rows = accounts.map(a => [a.name, ACCOUNT_TYPES[a.type] ?? a.type, a.initialBalance, a.totalIn, a.totalOut, a.balance, a.notes ?? ""]); exportToExcel(["الاسم","النوع","الرصيد الأولي","إجمالي الوارد","إجمالي الصادر","الرصيد الحالي","ملاحظات"], rows, "accounts", "الحسابات"); }}>
-            <Download className="h-4 w-4 ml-2" />تصدير Excel
-          </Button>
-          <Button variant="outline" onClick={openTransferDialog} disabled={accounts.length < 2}>
-            <ArrowLeftRight className="h-4 w-4 ml-2" />
-            ترحيل بين الخزائن
-          </Button>
-          <Button onClick={() => { resetAccountForm(); setIsAccountDialog(true); }}>
-            <Plus className="h-4 w-4 ml-2" />
-            إضافة حساب
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <h1 className="text-3xl font-bold tracking-tight">الخزينة والحسابات</h1>
+
+      <Tabs defaultValue="accounts" dir="rtl">
+        <TabsList>
+          <TabsTrigger value="accounts" className="flex items-center gap-2">
+            <Wallet className="h-4 w-4" /> الخزائن والحسابات
+          </TabsTrigger>
+          <TabsTrigger value="banks" className="flex items-center gap-2">
+            <Building className="h-4 w-4" /> البنوك
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ═══════════════ TAB: الخزائن ═══════════════ */}
+        <TabsContent value="accounts" className="space-y-6 mt-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              إجمالي الأرصدة: <span className="font-bold text-green-600 text-base">{totalBalance.toFixed(2)} ج.م</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => { const rows = accounts.map(a => [a.name, ACCOUNT_TYPES[a.type] ?? a.type, a.initialBalance, a.totalIn, a.totalOut, a.balance, a.notes ?? ""]); exportToExcel(["الاسم","النوع","الرصيد الأولي","إجمالي الوارد","إجمالي الصادر","الرصيد الحالي","ملاحظات"], rows, "accounts", "الحسابات"); }}>
+                <Download className="h-4 w-4 ml-2" />تصدير Excel
+              </Button>
+              <Button variant="outline" onClick={openTransferDialog} disabled={accounts.length < 2}>
+                <ArrowLeftRight className="h-4 w-4 ml-2" />ترحيل بين الخزائن
+              </Button>
+              <Button onClick={() => { resetAccountForm(); setIsAccountDialog(true); }}>
+                <Plus className="h-4 w-4 ml-2" />إضافة حساب
+              </Button>
+            </div>
+          </div>
 
       {/* Accounts Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -411,10 +528,7 @@ export default function Accounts() {
       <Dialog open={isTransferDialog} onOpenChange={open => { if (!open) setIsTransferDialog(false); }}>
         <DialogContent dir="rtl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5" />
-              ترحيل بين الخزائن
-            </DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><ArrowLeftRight className="h-5 w-5" />ترحيل بين الخزائن</DialogTitle>
             <DialogDescription>تحويل مبلغ من حساب إلى آخر مباشرة</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleTransferSubmit} className="space-y-4">
@@ -423,55 +537,188 @@ export default function Accounts() {
                 <Label>من حساب *</Label>
                 <Select value={transferForm.fromAccountId} onValueChange={v => setTransferForm({ ...transferForm, fromAccountId: v })}>
                   <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
-                  <SelectContent>
-                    {accounts.map(a => (
-                      <SelectItem key={a.id} value={String(a.id)} disabled={String(a.id) === transferForm.toAccountId}>
-                        {a.name} ({a.balance.toFixed(2)} ج.م)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{accounts.map(a => <SelectItem key={a.id} value={String(a.id)} disabled={String(a.id) === transferForm.toAccountId}>{a.name} ({a.balance.toFixed(2)} ج.م)</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="pb-2 text-muted-foreground">
-                <ArrowLeftRight className="h-5 w-5" />
-              </div>
+              <div className="pb-2 text-muted-foreground"><ArrowLeftRight className="h-5 w-5" /></div>
               <div className="space-y-2">
                 <Label>إلى حساب *</Label>
                 <Select value={transferForm.toAccountId} onValueChange={v => setTransferForm({ ...transferForm, toAccountId: v })}>
                   <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
-                  <SelectContent>
-                    {accounts.map(a => (
-                      <SelectItem key={a.id} value={String(a.id)} disabled={String(a.id) === transferForm.fromAccountId}>
-                        {a.name} ({a.balance.toFixed(2)} ج.م)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{accounts.map(a => <SelectItem key={a.id} value={String(a.id)} disabled={String(a.id) === transferForm.fromAccountId}>{a.name} ({a.balance.toFixed(2)} ج.م)</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>المبلغ (ج.م) *</Label>
-                <Input type="number" min="0.01" step="0.01" value={transferForm.amount} onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })} required autoFocus />
-              </div>
-              <div className="space-y-2">
-                <Label>التاريخ *</Label>
-                <Input type="date" value={transferForm.date} onChange={e => setTransferForm({ ...transferForm, date: e.target.value })} required />
-              </div>
+              <div className="space-y-2"><Label>المبلغ (ج.م) *</Label><Input type="number" min="0.01" step="0.01" value={transferForm.amount} onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })} required autoFocus /></div>
+              <div className="space-y-2"><Label>التاريخ *</Label><Input type="date" value={transferForm.date} onChange={e => setTransferForm({ ...transferForm, date: e.target.value })} required /></div>
             </div>
-            <div className="space-y-2">
-              <Label>ملاحظات</Label>
-              <Input value={transferForm.notes} onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })} placeholder="سبب التحويل (اختياري)" />
-            </div>
+            <div className="space-y-2"><Label>ملاحظات</Label><Input value={transferForm.notes} onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })} placeholder="سبب التحويل (اختياري)" /></div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIsTransferDialog(false)}>إلغاء</Button>
-              <Button type="submit" disabled={transferFunds.isPending}>
-                {transferFunds.isPending ? "جاري الترحيل..." : "ترحيل"}
-              </Button>
+              <Button type="submit" disabled={transferFunds.isPending}>{transferFunds.isPending ? "جاري الترحيل..." : "ترحيل"}</Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        {/* ═══════════════ TAB: البنوك ═══════════════ */}
+        <TabsContent value="banks" className="space-y-4 mt-4">
+          {/* Summary + actions */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4 rounded-lg border bg-primary/5 px-4 py-3">
+              <Building className="h-6 w-6 text-primary" />
+              <div>
+                <p className="text-xs text-muted-foreground">إجمالي أرصدة البنوك</p>
+                <p className="text-xl font-bold text-primary">{totalBankBalance.toLocaleString("ar-EG")} ج.م</p>
+              </div>
+              <div className="border-r mr-2 pr-4">
+                <p className="text-xs text-muted-foreground">عدد البنوك</p>
+                <p className="text-xl font-bold">{banks.length}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={downloadBankTemplate}>
+                <Download className="h-4 w-4 ml-1" />تحميل نموذج
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setBankImportOpen(true)}>
+                <Upload className="h-4 w-4 ml-1" />استيراد Excel
+              </Button>
+              <Button size="sm" onClick={openAddBank}>
+                <Plus className="h-4 w-4 ml-1" />إضافة بنك
+              </Button>
+            </div>
+          </div>
+
+          {/* Banks table */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">اسم البنك</TableHead>
+                  <TableHead className="text-right">رقم الحساب</TableHead>
+                  <TableHead className="text-right">اسم الحساب</TableHead>
+                  <TableHead className="text-right">الفرع</TableHead>
+                  <TableHead className="text-right">الرصيد</TableHead>
+                  <TableHead className="text-right">ملاحظات</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {banksLoading ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
+                ) : banks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <Building className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                      <p>لا توجد بنوك. أضف بنكاً أو استورد من Excel.</p>
+                    </TableCell>
+                  </TableRow>
+                ) : banks.map(b => (
+                  <TableRow key={b.id}>
+                    <TableCell className="font-medium">{b.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{b.accountNumber || "—"}</TableCell>
+                    <TableCell>{b.accountName || "—"}</TableCell>
+                    <TableCell>{b.branch || "—"}</TableCell>
+                    <TableCell className={`font-semibold ${b.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      {b.balance.toLocaleString("ar-EG")} ج.م
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{b.notes || "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => openEditBank(b)}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="text-red-500" onClick={() => { if (confirm(`حذف ${b.name}؟`)) deleteBank.mutate(b.id); }}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Add/Edit bank dialog */}
+          <Dialog open={bankOpen} onOpenChange={setBankOpen}>
+            <DialogContent className="max-w-md" dir="rtl">
+              <DialogHeader><DialogTitle>{editingBank ? "تعديل البنك" : "إضافة بنك جديد"}</DialogTitle></DialogHeader>
+              <form onSubmit={e => { e.preventDefault(); if (!bankForm.name.trim()) return; saveBank.mutate(bankForm); }} className="space-y-3">
+                {(["name","accountNumber","accountName","branch","balance","notes"] as const).map(key => (
+                  <div key={key}>
+                    <Label>{BANK_FIELD_LABELS[key]}</Label>
+                    <Input
+                      value={bankForm[key]}
+                      onChange={e => setBankForm(f => ({ ...f, [key]: e.target.value }))}
+                      type={key === "balance" ? "number" : "text"}
+                      required={key === "name"}
+                      placeholder={key === "name" ? "بنك مصر" : key === "accountNumber" ? "1234567890" : key === "balance" ? "0" : ""}
+                    />
+                  </div>
+                ))}
+                <div className="flex justify-end gap-2 mt-2">
+                  <Button type="button" variant="outline" onClick={() => setBankOpen(false)}>إلغاء</Button>
+                  <Button type="submit" disabled={saveBank.isPending}>{saveBank.isPending ? "جاري الحفظ..." : "حفظ"}</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Import file picker */}
+          <Dialog open={bankImportOpen} onOpenChange={setBankImportOpen}>
+            <DialogContent className="max-w-sm" dir="rtl">
+              <DialogHeader><DialogTitle>استيراد البنوك من Excel</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">اختر ملف Excel. يمكنك تحميل النموذج أولاً للتعرف على الأعمدة المطلوبة.</p>
+                <Button variant="outline" className="w-full" onClick={downloadBankTemplate}>
+                  <Download className="h-4 w-4 ml-2" />تحميل النموذج أولاً
+                </Button>
+                <Button className="w-full" onClick={() => bankFileRef.current?.click()}>
+                  <Upload className="h-4 w-4 ml-2" />اختيار ملف Excel
+                </Button>
+                <input ref={bankFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleBankFile} />
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Column mapping dialog */}
+          <Dialog open={bankMappingOpen} onOpenChange={setBankMappingOpen}>
+            <DialogContent className="max-w-lg" dir="rtl">
+              <DialogHeader><DialogTitle>ربط الأعمدة ({excelRows.length} صف)</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">حدد الأعمدة في الملف المقابلة لكل حقل.</p>
+                {Object.keys(BANK_FIELD_LABELS).map(f => (
+                  <div key={f} className="flex items-center gap-3">
+                    <Label className="w-32 shrink-0 text-sm">{BANK_FIELD_LABELS[f]}</Label>
+                    <select
+                      className="flex-1 border rounded-md px-2 py-1.5 text-sm bg-background"
+                      value={mapping[f] || ""}
+                      onChange={e => setMapping(m => ({ ...m, [f]: e.target.value }))}
+                    >
+                      <option value="">— تجاهل —</option>
+                      {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                ))}
+                {excelRows.length > 0 && mapping.name && (
+                  <div className="rounded-md border p-3 bg-muted/30 text-sm space-y-1">
+                    <p className="font-medium text-xs text-muted-foreground mb-1">معاينة أول صف:</p>
+                    {Object.entries(mapping).filter(([,v]) => v).map(([f, col]) => (
+                      <p key={f}><span className="text-muted-foreground">{BANK_FIELD_LABELS[f]}: </span>{excelRows[0]?.[excelHeaders.indexOf(col)] ?? "—"}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 mt-2">
+                <Button variant="outline" onClick={() => { setBankMappingOpen(false); setBankImportOpen(true); }}>رجوع</Button>
+                <Button onClick={confirmBankImport} disabled={importBanks.isPending}>
+                  {importBanks.isPending ? "جاري الاستيراد..." : `استيراد ${excelRows.length} صف`}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
