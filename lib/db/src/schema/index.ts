@@ -17,3 +17,4 @@ export * from "./projects";
 export * from "./rental";
 export * from "./jam3iyyat";
 export * from "./credit-cards";
+export * from "./banks";
