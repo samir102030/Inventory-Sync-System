@@ -89,14 +89,13 @@ router.get("/credit-accounts/suppliers", async (_req, res) => {
   return res.json(rows);
 });
 
-/* ── Unified balances: all customers + suppliers with any balance ── */
+/* ── Customer balances: positive = they owe us, negative = we owe them ── */
 router.get("/credit-accounts/balances", async (_req, res) => {
-  // --- Customers: balance they owe us (positive = owe us, negative = overpaid)
   const custCredit = await db
     .select({
       customerId: invoicesTable.customerId,
       customerName: customersTable.name,
-      totalCredit: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)`,
+      totalInvoiced: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)`,
     })
     .from(invoicesTable)
     .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
@@ -112,64 +111,30 @@ router.get("/credit-accounts/balances", async (_req, res) => {
     .where(sql`${receiptVouchersTable.customerId} IS NOT NULL`)
     .groupBy(receiptVouchersTable.customerId);
 
-  const custPaidMap = new Map(custPaid.map(p => [p.customerId, Number(p.totalPaid)]));
+  const paidMap = new Map(custPaid.map(p => [p.customerId, Number(p.totalPaid)]));
 
-  const customerRows = custCredit
+  const rows = custCredit
     .filter(c => c.customerId !== null)
-    .map(c => ({
-      id: c.customerId!,
-      name: c.customerName ?? "بدون اسم",
-      type: "customer" as const,
-      totalDebit: Number(c.totalCredit),      // what they owe
-      totalCredit: custPaidMap.get(c.customerId) ?? 0, // what they paid
-      balance: Number(c.totalCredit) - (custPaidMap.get(c.customerId) ?? 0),
-    }))
-    .filter(r => Math.abs(r.balance) > 0.001);
-
-  // --- Suppliers: balance we owe them (positive = we owe them, negative = overpaid)
-  const suppCredit = await db
-    .select({
-      supplierId: purchasesTable.supplierId,
-      supplierName: suppliersTable.name,
-      supplierLabel: purchasesTable.supplierName,
-      totalCredit: sql<string>`COALESCE(SUM(${purchasesTable.total}), 0)`,
+    .map(c => {
+      const totalInvoiced = Number(c.totalInvoiced);
+      const totalPaid = paidMap.get(c.customerId) ?? 0;
+      // positive balance = they owe us (عليه فلوس)
+      // negative balance = we owe them (ليه فلوس - they overpaid)
+      return {
+        customerId: c.customerId!,
+        name: c.customerName ?? "بدون اسم",
+        totalInvoiced,
+        totalPaid,
+        balance: totalInvoiced - totalPaid,
+      };
     })
-    .from(purchasesTable)
-    .leftJoin(suppliersTable, eq(purchasesTable.supplierId, suppliersTable.id))
-    .where(eq(purchasesTable.paymentMethod, "credit"))
-    .groupBy(purchasesTable.supplierId, suppliersTable.name, purchasesTable.supplierName);
+    .filter(r => Math.abs(r.balance) > 0.001)
+    .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 
-  const suppPaid = await db
-    .select({
-      supplierId: paymentVouchersTable.supplierId,
-      totalPaid: sql<string>`COALESCE(SUM(${paymentVouchersTable.amount}), 0)`,
-    })
-    .from(paymentVouchersTable)
-    .where(sql`${paymentVouchersTable.supplierId} IS NOT NULL`)
-    .groupBy(paymentVouchersTable.supplierId);
+  const totalOwedByCustomers = rows.filter(r => r.balance > 0).reduce((s, r) => s + r.balance, 0);
+  const totalOwedToCustomers = rows.filter(r => r.balance < 0).reduce((s, r) => s + Math.abs(r.balance), 0);
 
-  const suppPaidMap = new Map(suppPaid.map(p => [p.supplierId, Number(p.totalPaid)]));
-
-  const supplierRows = suppCredit
-    .filter(c => c.supplierId !== null)
-    .map(c => ({
-      id: c.supplierId!,
-      name: c.supplierName ?? c.supplierLabel ?? "بدون اسم",
-      type: "supplier" as const,
-      totalDebit: Number(c.totalCredit),       // what we bought on credit
-      totalCredit: suppPaidMap.get(c.supplierId) ?? 0, // what we paid them
-      balance: Number(c.totalCredit) - (suppPaidMap.get(c.supplierId) ?? 0),
-    }))
-    .filter(r => Math.abs(r.balance) > 0.001);
-
-  const all = [...customerRows, ...supplierRows].sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
-
-  const summary = {
-    totalReceivable: customerRows.filter(r => r.balance > 0).reduce((s, r) => s + r.balance, 0),
-    totalPayable: supplierRows.filter(r => r.balance > 0).reduce((s, r) => s + r.balance, 0),
-  };
-
-  return res.json({ rows: all, summary });
+  return res.json({ rows, totalOwedByCustomers, totalOwedToCustomers });
 });
 
 export default router;
