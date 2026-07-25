@@ -179,24 +179,56 @@ router.post("/products/import", async (req, res) => {
 
   const results = { created: 0, failed: 0, errors: [] as string[] };
 
-  for (const item of items) {
-    try {
-      if (!item.name || item.price == null) { results.failed++; results.errors.push(`صف بدون اسم أو سعر: ${JSON.stringify(item)}`); continue; }
-      const catId = item.categoryName ? (catMap.get(item.categoryName.trim().toLowerCase()) ?? null) : null;
-      await db.insert(productsTable).values({
-        name: String(item.name),
-        price: String(item.price),
-        costPrice: item.costPrice != null ? String(item.costPrice) : null,
-        categoryId: catId ?? allCategories[0]?.id ?? 1,
-        barcode: item.barcode ? String(item.barcode) : null,
-        stock: item.stock != null ? Number(item.stock) : 0,
-        minStock: item.minStock != null ? Number(item.minStock) : 5,
-        unit: item.unit ?? "قطعة",
-      });
-      results.created++;
-    } catch (err: any) {
+  const CHUNK = 100;
+  const validItems = items.filter(item => {
+    if (!item.name || item.price == null) {
       results.failed++;
-      results.errors.push(`${item.name}: ${err.message}`);
+      results.errors.push(`صف بدون اسم أو سعر: ${JSON.stringify(item)}`);
+      return false;
+    }
+    return true;
+  });
+
+  for (let i = 0; i < validItems.length; i += CHUNK) {
+    const chunk = validItems.slice(i, i + CHUNK);
+    try {
+      await db.insert(productsTable).values(
+        chunk.map(item => {
+          const catId = item.categoryName ? (catMap.get(item.categoryName.trim().toLowerCase()) ?? null) : null;
+          return {
+            name: String(item.name),
+            price: String(item.price),
+            costPrice: item.costPrice != null ? String(item.costPrice) : null,
+            categoryId: catId ?? allCategories[0]?.id ?? 1,
+            barcode: item.barcode ? String(item.barcode) : null,
+            stock: item.stock != null ? Number(item.stock) : 0,
+            minStock: item.minStock != null ? Number(item.minStock) : 5,
+            unit: item.unit ?? "قطعة",
+          };
+        })
+      );
+      results.created += chunk.length;
+    } catch (err: any) {
+      // fallback: insert one by one to identify the failing row
+      for (const item of chunk) {
+        try {
+          const catId = item.categoryName ? (catMap.get(item.categoryName.trim().toLowerCase()) ?? null) : null;
+          await db.insert(productsTable).values({
+            name: String(item.name),
+            price: String(item.price),
+            costPrice: item.costPrice != null ? String(item.costPrice) : null,
+            categoryId: catId ?? allCategories[0]?.id ?? 1,
+            barcode: item.barcode ? String(item.barcode) : null,
+            stock: item.stock != null ? Number(item.stock) : 0,
+            minStock: item.minStock != null ? Number(item.minStock) : 5,
+            unit: item.unit ?? "قطعة",
+          });
+          results.created++;
+        } catch (e: any) {
+          results.failed++;
+          results.errors.push(`${item.name}: ${e.message}`);
+        }
+      }
     }
   }
 
