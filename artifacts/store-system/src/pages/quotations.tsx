@@ -109,12 +109,14 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
     </tr>
   </table>
   <div style="background:${primaryColor};color:#fff;text-align:center;padding:10px;font-size:18px;font-weight:700;border-radius:6px;margin-bottom:16px;">عرض سعر / Quotation</div>
-  <div style="display:flex;justify-content:space-between;background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
-    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">رقم العرض</div><div style="font-weight:600;">${escapeHtml(q.quotationNumber)}</div></div>
-    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">التاريخ</div><div style="font-weight:600;">${new Date(q.createdAt).toLocaleDateString('en-GB')}</div></div>
-    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">العميل</div><div style="font-weight:600;">${escapeHtml(q.customerName || "—")}</div></div>
-    <div><div style="font-size:11px;color:#888;margin-bottom:4px;">صالح حتى</div><div style="font-weight:600;">${q.validUntil ? new Date(q.validUntil).toLocaleDateString('en-GB') : "—"}</div></div>
-  </div>
+  <table style="width:100%;border-collapse:collapse;background:#f8f9fa;border-radius:8px;margin-bottom:20px;">
+    <tr>
+      <td style="padding:14px 18px;"><div style="font-size:11px;color:#888;margin-bottom:4px;">رقم العرض</div><div style="font-weight:600;">${escapeHtml(q.quotationNumber)}</div></td>
+      <td style="padding:14px 18px;"><div style="font-size:11px;color:#888;margin-bottom:4px;">التاريخ</div><div style="font-weight:600;">${new Date(q.createdAt).toLocaleDateString('en-GB')}</div></td>
+      <td style="padding:14px 18px;"><div style="font-size:11px;color:#888;margin-bottom:4px;">العميل</div><div style="font-weight:600;">${escapeHtml(q.customerName || "—")}</div></td>
+      <td style="padding:14px 18px;"><div style="font-size:11px;color:#888;margin-bottom:4px;">صالح حتى</div><div style="font-weight:600;">${q.validUntil ? new Date(q.validUntil).toLocaleDateString('en-GB') : "—"}</div></td>
+    </tr>
+  </table>
   <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
     <thead><tr style="background:${primaryColor};color:#fff;">
       <th style="padding:10px 12px;text-align:right;">المنتج / الخدمة</th>
@@ -124,14 +126,16 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
     </tr></thead>
     <tbody>${itemRows}</tbody>
   </table>
-  <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
-    <div style="width:260px;">
-      <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;"><span>المجموع الفرعي</span><span>${Number(q.subtotal).toFixed(2)} ج.م</span></div>
-      ${Number(q.discount) > 0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;color:#dc2626;border-bottom:1px solid #f0f0f0;"><span>الخصم</span><span>-${Number(q.discount).toFixed(2)} ج.م</span></div>` : ""}
-      ${Number(q.tax) > 0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;"><span>الضريبة</span><span>+${Number(q.tax).toFixed(2)} ج.م</span></div>` : ""}
-      <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:16px;font-weight:700;color:${primaryColor};"><span>الإجمالي</span><span>${Number(q.total).toFixed(2)} ج.م</span></div>
-    </div>
-  </div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+    <tr><td></td><td style="width:260px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;">المجموع الفرعي</td><td style="padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;text-align:left;">${Number(q.subtotal).toFixed(2)} ج.م</td></tr>
+        ${Number(q.discount) > 0 ? `<tr><td style="padding:5px 0;font-size:13px;color:#dc2626;border-bottom:1px solid #f0f0f0;">الخصم</td><td style="padding:5px 0;font-size:13px;color:#dc2626;border-bottom:1px solid #f0f0f0;text-align:left;">-${Number(q.discount).toFixed(2)} ج.م</td></tr>` : ""}
+        ${Number(q.tax) > 0 ? `<tr><td style="padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;">الضريبة</td><td style="padding:5px 0;font-size:13px;border-bottom:1px solid #f0f0f0;text-align:left;">+${Number(q.tax).toFixed(2)} ج.م</td></tr>` : ""}
+        <tr><td style="padding:8px 0 0;font-size:16px;font-weight:700;color:${primaryColor};">الإجمالي</td><td style="padding:8px 0 0;font-size:16px;font-weight:700;color:${primaryColor};text-align:left;">${Number(q.total).toFixed(2)} ج.م</td></tr>
+      </table>
+    </td></tr>
+  </table>
   ${q.notes ? `<div style="background:#f8f9fa;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:16px;"><strong>ملاحظات:</strong> ${escapeHtml(q.notes)}</div>` : ""}
   <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#888;">${footerNote || `هذا العرض صادر من ${companyName} — نتطلع للتعامل معكم`}</div>
 </div>`;
