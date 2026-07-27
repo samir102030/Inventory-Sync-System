@@ -21,7 +21,9 @@ router.get("/customers", async (req, res) => {
     })
     .from(customersTable)
     .leftJoin(invoicesTable, eq(invoicesTable.customerId, customersTable.id))
-    .where(search ? ilike(customersTable.name, `%${search}%`) : undefined)
+    .where(search
+      ? sql`(${ilike(customersTable.name, `%${search}%`)} OR ${ilike(customersTable.phone, `%${search}%`)})`
+      : undefined)
     .groupBy(customersTable.id)
     .orderBy(customersTable.name);
 

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Plus, Eye, Edit, Trash2, Printer, FileCheck, Download, Loader2, Share2, MessageCircle } from "lucide-react";
+import { Search, Plus, Eye, Edit, Trash2, Printer, FileCheck, Download, Loader2, Share2, MessageCircle, UserPlus, ChevronDown, X } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { exportToExcel } from "@/lib/excel";
@@ -269,6 +269,42 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
     validUntil: quotation?.validUntil || "",
   });
 
+  // Customer search combobox state
+  const [customerSearch, setCustomerSearch] = useState(() => {
+    if (quotation?.customerId) {
+      return ""; // will be filled after customers load
+    }
+    return "";
+  });
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+
+  // New customer mini-form state
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: "", phone: "" });
+
+  const selectedCustomer = customers.find(c => c.id.toString() === formData.customerId) || null;
+
+  const filteredCustomers = customerSearch.trim()
+    ? customers.filter(c =>
+        c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+        (c.phone && c.phone.includes(customerSearch))
+      )
+    : customers;
+
+  const createCustomerMutation = useMutation({
+    mutationFn: (data: { name: string; phone?: string }) =>
+      fetchJSON(`${BASE}/customers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+    onSuccess: (created: Customer) => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      setFormData(f => ({ ...f, customerId: created.id.toString() }));
+      setCustomerSearch("");
+      setAddCustomerOpen(false);
+      setNewCustomer({ name: "", phone: "" });
+      toast({ title: `تمت إضافة "${created.name}"` });
+    },
+    onError: () => toast({ title: "فشل إضافة العميل", variant: "destructive" }),
+  });
+
   const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
   const discount = parseFloat(formData.discount) || 0;
   const tax = parseFloat(formData.tax) || 0;
@@ -305,15 +341,111 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
+        {/* ── Customer search combobox ── */}
         <div className="space-y-2">
-          <Label>العميل</Label>
-          <Select value={formData.customerId} onValueChange={v => setFormData(f => ({ ...f, customerId: v }))}>
-            <SelectTrigger><SelectValue placeholder="اختر عميلاً..." /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">بدون عميل</SelectItem>
-              {customers.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center justify-between">
+            <Label>العميل</Label>
+            <button
+              type="button"
+              onClick={() => setAddCustomerOpen(v => !v)}
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <UserPlus className="h-3 w-3" /> عميل جديد
+            </button>
+          </div>
+
+          {/* Mini add-customer form */}
+          {addCustomerOpen && (
+            <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">إضافة عميل جديد</p>
+              <Input
+                placeholder="الاسم *"
+                value={newCustomer.name}
+                onChange={e => setNewCustomer(v => ({ ...v, name: e.target.value }))}
+                className="h-8 text-sm"
+              />
+              <Input
+                placeholder="رقم التليفون"
+                value={newCustomer.phone}
+                onChange={e => setNewCustomer(v => ({ ...v, phone: e.target.value }))}
+                className="h-8 text-sm"
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button" size="sm" className="h-7 text-xs flex-1"
+                  disabled={!newCustomer.name.trim() || createCustomerMutation.isPending}
+                  onClick={() => createCustomerMutation.mutate({ name: newCustomer.name.trim(), phone: newCustomer.phone || undefined })}
+                >
+                  {createCustomerMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "حفظ"}
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAddCustomerOpen(false)}>إلغاء</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Search input + dropdown */}
+          <div className="relative">
+            <div
+              className="flex items-center border rounded-md px-3 h-10 gap-2 cursor-text bg-background"
+              onClick={() => setCustomerDropdownOpen(true)}
+            >
+              {selectedCustomer && !customerDropdownOpen ? (
+                <>
+                  <span className="flex-1 text-sm truncate">{selectedCustomer.name}</span>
+                  {selectedCustomer.phone && <span className="text-xs text-muted-foreground shrink-0">{selectedCustomer.phone}</span>}
+                  <button type="button" onClick={e => { e.stopPropagation(); setFormData(f => ({ ...f, customerId: "" })); setCustomerSearch(""); }}>
+                    <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    placeholder="ابحث بالاسم أو التليفون..."
+                    value={customerSearch}
+                    onChange={e => { setCustomerSearch(e.target.value); setCustomerDropdownOpen(true); }}
+                    onFocus={() => setCustomerDropdownOpen(true)}
+                  />
+                  {customerSearch && (
+                    <button type="button" onClick={e => { e.stopPropagation(); setCustomerSearch(""); }}>
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                </>
+              )}
+            </div>
+
+            {customerDropdownOpen && (
+              <>
+                {/* backdrop to close */}
+                <div className="fixed inset-0 z-10" onClick={() => setCustomerDropdownOpen(false)} />
+                <div className="absolute z-20 w-full mt-1 bg-background border rounded-md shadow-lg max-h-52 overflow-y-auto">
+                  <div
+                    className="px-3 py-2 text-sm text-muted-foreground hover:bg-muted cursor-pointer"
+                    onClick={() => { setFormData(f => ({ ...f, customerId: "" })); setCustomerSearch(""); setCustomerDropdownOpen(false); }}
+                  >
+                    بدون عميل
+                  </div>
+                  {filteredCustomers.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</div>
+                  ) : (
+                    filteredCustomers.map(c => (
+                      <div
+                        key={c.id}
+                        className={`px-3 py-2 cursor-pointer hover:bg-muted flex items-center justify-between gap-2 ${formData.customerId === c.id.toString() ? "bg-primary/10 font-medium" : ""}`}
+                        onClick={() => { setFormData(f => ({ ...f, customerId: c.id.toString() })); setCustomerSearch(""); setCustomerDropdownOpen(false); }}
+                      >
+                        <span className="text-sm truncate">{c.name}</span>
+                        {c.phone && <span className="text-xs text-muted-foreground shrink-0">{c.phone}</span>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           <Label>صالح حتى</Label>
