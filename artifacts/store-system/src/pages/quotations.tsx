@@ -62,17 +62,24 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{STATUS_LABELS[status] || status}</Badge>;
 }
 
-async function downloadQuotationPDF(q: Quotation, settings: any) {
-  const html = buildQuotationHTML(q, settings);
-  const container = document.createElement("div");
-  container.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:#fff;";
-  container.innerHTML = html;
-  document.body.appendChild(container);
-  try {
-    await downloadPDF(container, `عرض-سعر-${q.quotationNumber}.pdf`);
-  } finally {
-    document.body.removeChild(container);
-  }
+function downloadQuotationPDF(q: Quotation, settings: any) {
+  const primaryColor = settings?.primaryColor || "#1e40af";
+  const innerHtml = buildQuotationHTML(q, settings);
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/>
+<title>عرض سعر #${escapeHtml(q.quotationNumber)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#fff;}
+@media print{
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @page{size:A4;margin:10mm;}
+}
+thead{background:${primaryColor}!important;-webkit-print-color-adjust:exact;}
+</style>
+</head><body>${innerHtml}
+<script>window.onload=function(){window.print();};<\/script></body></html>`;
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (win) { win.document.write(html); win.document.close(); }
 }
 
 function buildQuotationHTML(q: Quotation, settings: any): string {
@@ -662,14 +669,9 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
           <Button variant="outline" size="sm" onClick={() => printQuotationA4(full, settings)} className="gap-1">
             <Printer className="h-4 w-4" />طباعة
           </Button>
-          <Button variant="outline" size="sm" disabled={pdfLoading} className="gap-1"
-            onClick={async () => {
-              setPdfLoading(true);
-              try { await downloadQuotationPDF(full, settings); }
-              finally { setPdfLoading(false); }
-            }}>
-            {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {pdfLoading ? "جاري التحضير..." : "PDF"}
+          <Button variant="outline" size="sm" className="gap-1"
+            onClick={() => downloadQuotationPDF(full, settings)}>
+            <Download className="h-4 w-4" />PDF
           </Button>
           <Button size="sm" disabled={shareLoading} className="gap-1 bg-blue-600 hover:bg-blue-700"
             onClick={async () => {
@@ -683,8 +685,8 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
                 const customerPhone = customer?.whatsapp || customer?.phone || "";
                 const shared = await sharePDF(container, filename);
                 if (!shared) {
-                  // Web Share not supported — download PDF then open WhatsApp if customer has phone
-                  await downloadQuotationPDF(full, settings);
+                  // Web Share not supported — open print-to-PDF then open WhatsApp if customer has phone
+                  downloadQuotationPDF(full, settings);
                   if (customerPhone) {
                     const msg = `مرحباً، يسعدنا إرسال عرض السعر رقم ${full.quotationNumber} بإجمالي ${Number(full.total).toFixed(2)} ج.م. نرجو مراجعة الملف المرفق.`;
                     const phone = customerPhone.replace(/\D/g, "").replace(/^0/, "20");
