@@ -93,15 +93,21 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
     </tr>`).join("");
 
   return `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;background:#fff;padding:24px;direction:rtl;">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:3px solid ${primaryColor};margin-bottom:20px;">
-    <div>
-      <div style="font-size:22px;font-weight:700;color:${primaryColor};">${companyName}</div>
-      ${companyPhone ? `<div style="font-size:12px;color:#555;margin-top:4px;">📞 ${companyPhone}</div>` : ""}
-      ${companyAddress ? `<div style="font-size:12px;color:#555;margin-top:2px;">📍 ${companyAddress}</div>` : ""}
-      ${companyEmail ? `<div style="font-size:12px;color:#555;margin-top:2px;">✉ ${companyEmail}</div>` : ""}
-    </div>
-    ${safeSrcUrl(companyLogo) ? `<img src="${safeSrcUrl(companyLogo)}" style="max-height:80px;max-width:180px;object-fit:contain;" crossorigin="anonymous"/>` : `<div style="width:90px;height:50px;background:${primaryColor};border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:4px;">${companyName}</div>`}
-  </div>
+  <table style="width:100%;border-bottom:3px solid ${primaryColor};margin-bottom:20px;padding-bottom:16px;border-collapse:collapse;">
+    <tr>
+      <td style="vertical-align:top;">
+        <div style="font-size:22px;font-weight:700;color:${primaryColor};">${companyName}</div>
+        ${companyPhone ? `<div style="font-size:12px;color:#555;margin-top:4px;">&#9990; ${companyPhone}</div>` : ""}
+        ${companyAddress ? `<div style="font-size:12px;color:#555;margin-top:2px;">&#9679; ${companyAddress}</div>` : ""}
+        ${companyEmail ? `<div style="font-size:12px;color:#555;margin-top:2px;">&#9993; ${companyEmail}</div>` : ""}
+      </td>
+      <td style="vertical-align:top;text-align:left;width:200px;">
+        ${safeSrcUrl(companyLogo)
+          ? `<img src="${safeSrcUrl(companyLogo)}" style="max-height:80px;max-width:180px;object-fit:contain;" crossorigin="anonymous"/>`
+          : `<div style="width:90px;height:50px;background:${primaryColor};border-radius:8px;color:#fff;font-size:11px;text-align:center;padding:14px 4px;line-height:1.3;">${companyName}</div>`}
+      </td>
+    </tr>
+  </table>
   <div style="background:${primaryColor};color:#fff;text-align:center;padding:10px;font-size:18px;font-weight:700;border-radius:6px;margin-bottom:16px;">عرض سعر / Quotation</div>
   <div style="display:flex;justify-content:space-between;background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
     <div><div style="font-size:11px;color:#888;margin-bottom:4px;">رقم العرض</div><div style="font-weight:600;">${escapeHtml(q.quotationNumber)}</div></div>
@@ -670,10 +676,19 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
               container.innerHTML = buildQuotationHTML(full, settings);
               document.body.appendChild(container);
               try {
+                const customerPhone = customer?.whatsapp || customer?.phone || "";
                 const shared = await sharePDF(container, filename);
                 if (!shared) {
+                  // Web Share not supported — download PDF then open WhatsApp if customer has phone
                   await downloadQuotationPDF(full, settings);
-                  toast({ title: "تم تحضير PDF للإرسال", description: "المشاركة المباشرة غير مدعومة في هذا المتصفح، تم التحميل بدلاً منه" });
+                  if (customerPhone) {
+                    const msg = `مرحباً، يسعدنا إرسال عرض السعر رقم ${full.quotationNumber} بإجمالي ${Number(full.total).toFixed(2)} ج.م. نرجو مراجعة الملف المرفق.`;
+                    const phone = customerPhone.replace(/\D/g, "").replace(/^0/, "20");
+                    setTimeout(() => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank"), 800);
+                    toast({ title: "تم تحميل PDF", description: "سيفتح واتساب — أرفق الملف يدوياً من مجلد التنزيلات" });
+                  } else {
+                    toast({ title: "تم تحميل PDF" });
+                  }
                 }
               } catch {
                 toast({ title: "حدث خطأ أثناء المشاركة", variant: "destructive" });
@@ -683,7 +698,7 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
               }
             }}>
             {shareLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
-            {shareLoading ? "جاري التحضير..." : "إرسال PDF"}
+            {shareLoading ? "جاري التحضير..." : (customer?.phone || customer?.whatsapp ? "إرسال PDF للعميل" : "إرسال PDF")}
           </Button>
           <Button size="sm" variant="outline" className="gap-1 text-green-700 border-green-500 hover:bg-green-50"
             onClick={() => {
