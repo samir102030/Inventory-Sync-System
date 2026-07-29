@@ -43,7 +43,30 @@ import Balances from "@/pages/balances";
 import SupplierBalances from "@/pages/supplier-balances";
 import Banks from "@/pages/banks";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // لا تعيد الجلب تلقائياً لما تتحول للتاب — بيمنع مفاجآت وسط الشغل
+      refetchOnWindowFocus: false,
+      // retry مرة واحدة للـ queries العادية (مش useGetMe — دي ليها إعدادها الخاص)
+      retry: (count, error: any) => {
+        if (error?.response?.status === 401 || error?.response?.status === 403) return false;
+        return count < 1;
+      },
+      retryDelay: 1500,
+      staleTime: 30_000, // 30 ثانية — البيانات مش stale فوراً
+    },
+    mutations: {
+      // retry مرة واحدة للـ mutations لو مش 4xx
+      retry: (count, error: any) => {
+        const status = error?.response?.status;
+        if (status && status >= 400 && status < 500) return false;
+        return count < 1;
+      },
+      retryDelay: 1500,
+    },
+  },
+});
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
