@@ -26,26 +26,34 @@ router.post("/auth/login", async (req, res) => {
     return res.status(400).json({ error: "Username and password required" });
   }
 
-  const users = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
-  const user = users[0];
+  try {
+    const users = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
+    const user = users[0];
 
-  if (!user || !user.passwordHash) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    if (user.status !== "active") {
+      return res.status(403).json({ error: "الحساب بانتظار موافقة الأدمن" });
+    }
+
+    (req.session as any).userId = user.id;
+    (req.session as any).role = user.role;
+
+    return res.json({ user: serializeUser(user) });
+  } catch (error) {
+    req.log?.error({ err: error }, "Password login failed because the database was unavailable");
+    return res.status(503).json({
+      error: "تعذر الاتصال بقاعدة البيانات مؤقتاً. احتفظ بالصفحة مفتوحة وحاول مرة أخرى بعد لحظات.",
+      code: "DATABASE_UNAVAILABLE",
+    });
   }
-
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  if (user.status !== "active") {
-    return res.status(403).json({ error: "الحساب بانتظار موافقة الأدمن" });
-  }
-
-  (req.session as any).userId = user.id;
-  (req.session as any).role = user.role;
-
-  return res.json({ user: serializeUser(user) });
 });
 
 router.post("/auth/google-sync", async (req, res) => {

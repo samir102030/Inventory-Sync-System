@@ -34,10 +34,16 @@ export default function Login() {
         onSuccess: () => {
           setLocation("/dashboard");
         },
-        onError: () => {
+        onError: (error: any) => {
+          const status = error?.status ?? error?.response?.status;
+          const serverMessage = error?.data?.error;
           toast({
-            title: "خطأ في تسجيل الدخول",
-            description: "اسم المستخدم أو كلمة المرور غير صحيحة",
+            title: status === 401 ? "بيانات الدخول غير صحيحة" : "تعذر تسجيل الدخول",
+            description: status === 401
+              ? "تأكد من اسم المستخدم وكلمة المرور."
+              : serverMessage || (status === 503
+                ? "قاعدة البيانات أو الخادم غير متاح مؤقتاً. حاول مرة أخرى بعد لحظات."
+                : "تعذر الاتصال بالخادم مؤقتاً. حاول مرة أخرى بعد لحظات."),
             variant: "destructive",
           });
         },

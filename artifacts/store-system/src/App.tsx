@@ -43,6 +43,12 @@ import Balances from "@/pages/balances";
 import SupplierBalances from "@/pages/supplier-balances";
 import Banks from "@/pages/banks";
 
+function getErrorStatus(error: unknown): number | undefined {
+  const value = error as { status?: unknown; response?: { status?: unknown } } | null;
+  const status = value?.status ?? value?.response?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -50,7 +56,8 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       // retry مرة واحدة للـ queries العادية (مش useGetMe — دي ليها إعدادها الخاص)
       retry: (count, error: any) => {
-        if (error?.response?.status === 401 || error?.response?.status === 403) return false;
+        const status = getErrorStatus(error);
+        if (status === 401 || status === 403) return false;
         return count < 1;
       },
       retryDelay: 1500,
@@ -59,7 +66,7 @@ const queryClient = new QueryClient({
     mutations: {
       // retry مرة واحدة للـ mutations لو مش 4xx
       retry: (count, error: any) => {
-        const status = error?.response?.status;
+        const status = getErrorStatus(error);
         if (status && status >= 400 && status < 500) return false;
         return count < 1;
       },

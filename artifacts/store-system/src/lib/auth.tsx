@@ -93,9 +93,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // نحاول 3 مرات قبل ما نحكم بالفشل، مع تأخير متزايد
   const { data: user, isLoading, isError, failureCount } = useGetMe({
     query: {
+      queryKey: getGetMeQueryKey(),
       retry: (count, error: any) => {
         // لو 401 (مش مسجل دخول فعلاً) متعاودش — حوّل للـ login
-        if (error?.response?.status === 401) return false;
+        if (error?.status === 401 || error?.response?.status === 401) return false;
         return count < 3;
       },
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000), // 1s, 2s, 4s

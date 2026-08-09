@@ -1,3 +1,4 @@
 - [New modules pattern](new-modules.md) — new modules use direct fetch+useQuery instead of generated hooks; codegen only needed for modules in openapi.yaml
 - [DB migration](db-migration.md) — push schema with pnpm --filter @workspace/db run push; seed with scripts/node_modules/.bin/tsx artifacts/api-server/src/seed.ts
 - [Clerk v6 React API](clerk-v6-react-api.md) — useSignIn() returns signals API; use signIn.sso() not authenticateWithRedirect(); no isLoaded on useSignIn
+- [API error status](api-error-status.md) — generated ApiError exposes HTTP status as error.status, not only error.response.status
