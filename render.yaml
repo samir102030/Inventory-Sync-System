@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: store-system
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build:deploy
+    startCommand: pnpm run db:migrate && pnpm run start
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      # Generated once by Render and kept stable across deploys.
+      - key: SESSION_SECRET
+        generateValue: true
+      # Paste the Neon connection string here in the Render dashboard.
+      # Never commit it to the repository.
+      - key: DATABASE_URL
+        sync: false

@@ -4,9 +4,16 @@ import { eq, sql, desc } from "drizzle-orm";
 
 const router = Router();
 
+// Derived from the highest number already issued, not from the row count.
+// Counting rows reuses numbers after a deletion, which then collides with the
+// UNIQUE constraint on quotation_number and blocks saving entirely.
 async function generateQuotationNumber() {
-  const count = await db.select({ cnt: sql<number>`COUNT(*)` }).from(quotationsTable);
-  const num = (Number(count[0]?.cnt ?? 0) + 1).toString().padStart(5, "0");
+  const [row] = await db
+    .select({
+      max: sql<number>`COALESCE(MAX(NULLIF(SUBSTRING(${quotationsTable.quotationNumber} FROM '[0-9]+$'), '')::int), 0)`,
+    })
+    .from(quotationsTable);
+  const num = (Number(row?.max ?? 0) + 1).toString().padStart(5, "0");
   return `QUO-${num}`;
 }
 
@@ -191,10 +198,29 @@ router.post("/quotations/:id/convert", async (req, res) => {
 
   const items = await db.select().from(quotationItemsTable).where(eq(quotationItemsTable.quotationId, id));
 
+  // invoice_items.product_id is NOT NULL, so a quotation line typed by hand
+  // (no catalogue product behind it) would fail at insert time with an opaque
+  // database error. Fail early with something the user can act on instead.
+  const unlinked = items.filter((i) => !i.productId).map((i) => i.productName);
+  if (unlinked.length > 0) {
+    return res.status(400).json({
+      error:
+        "لا يمكن تحويل العرض لفاتورة لأن البنود التالية غير مرتبطة بمنتج من المخزن: " +
+        unlinked.join("، ") +
+        ". افتح العرض واختر المنتج لكل بند منهم، أو أضفه للمنتجات أولاً.",
+      code: "UNLINKED_ITEMS",
+      items: unlinked,
+    });
+  }
+
   const settings = await db.select().from(invoiceSettingsTable).limit(1);
   const prefix = settings[0]?.invoicePrefix ?? "INV";
-  const count = await db.select({ cnt: sql<number>`COUNT(*)` }).from(invoicesTable);
-  const num = (Number(count[0]?.cnt ?? 0) + 1).toString().padStart(5, "0");
+  const [maxRow] = await db
+    .select({
+      max: sql<number>`COALESCE(MAX(NULLIF(SUBSTRING(${invoicesTable.invoiceNumber} FROM '[0-9]+$'), '')::int), 0)`,
+    })
+    .from(invoicesTable);
+  const num = (Number(maxRow?.max ?? 0) + 1).toString().padStart(5, "0");
   const invoiceNumber = `${prefix}-${num}`;
 
   const [invoice] = await db.insert(invoicesTable).values({

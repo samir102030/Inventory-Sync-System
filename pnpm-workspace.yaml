@@ -4,6 +4,10 @@ packages:
   - lib/integrations/*
   - scripts
 
+allowBuilds:
+  core-js: set this to true or false
+  esbuild: set this to true or false
+
 autoInstallPeers: false
 
 catalog:
@@ -38,6 +42,7 @@ minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - esbuild
   - esbuild
   - msw
   - unrs-resolver
@@ -132,3 +137,6 @@ overrides:
   rollup>@rollup/rollup-win32-ia32-msvc: '-'
   rollup>@rollup/rollup-win32-x64-gnu: '-'
   rollup>@rollup/rollup-win32-x64-msvc: '-'
+
+ignoredBuiltDependencies:
+  - core-js

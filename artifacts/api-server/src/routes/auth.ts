@@ -1,6 +1,5 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { getAuth, clerkClient } from "@clerk/express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -15,7 +14,7 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
     email: user.email,
     phone: user.phone,
     status: user.status,
-    loginMethod: user.clerkUserId ? "google" : "password",
+    loginMethod: "password",
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -54,58 +53,6 @@ router.post("/auth/login", async (req, res) => {
       code: "DATABASE_UNAVAILABLE",
     });
   }
-});
-
-router.post("/auth/google-sync", async (req, res) => {
-  const auth = getAuth(req);
-  const clerkUserId = auth?.userId;
-  if (!clerkUserId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const clerkUser = await clerkClient.users.getUser(clerkUserId);
-  const email =
-    clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress ??
-    clerkUser.emailAddresses[0]?.emailAddress ??
-    null;
-  const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || email || "مستخدم جوجل";
-
-  if (!email) {
-    return res.status(400).json({ error: "لا يوجد بريد إلكتروني مرتبط بحساب جوجل" });
-  }
-
-  let [user] = await db.select().from(usersTable).where(eq(usersTable.clerkUserId, clerkUserId)).limit(1);
-
-  if (!user) {
-    [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
-    if (user && !user.clerkUserId) {
-      [user] = await db.update(usersTable).set({ clerkUserId }).where(eq(usersTable.id, user.id)).returning();
-    }
-  }
-
-  if (!user) {
-    [user] = await db
-      .insert(usersTable)
-      .values({
-        username: email,
-        passwordHash: null,
-        name,
-        role: "cashier",
-        email,
-        clerkUserId,
-        status: "pending",
-      })
-      .returning();
-  }
-
-  if (user.status !== "active") {
-    return res.json({ status: "pending", user: serializeUser(user) });
-  }
-
-  (req.session as any).userId = user.id;
-  (req.session as any).role = user.role;
-
-  return res.json({ status: "approved", user: serializeUser(user) });
 });
 
 router.post("/auth/logout", (req, res) => {
