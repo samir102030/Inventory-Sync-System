@@ -140,3 +140,4 @@ overrides:
 
 ignoredBuiltDependencies:
   - core-js
+strictDepBuilds: false
