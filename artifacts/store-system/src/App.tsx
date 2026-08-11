@@ -42,6 +42,7 @@ import CreditCards from "@/pages/credit-cards";
 import Balances from "@/pages/balances";
 import SupplierBalances from "@/pages/supplier-balances";
 import Banks from "@/pages/banks";
+import Companies from "@/pages/companies";
 
 function getErrorStatus(error: unknown): number | undefined {
   const value = error as { status?: unknown; response?: { status?: unknown } } | null;
@@ -152,6 +153,7 @@ function Router() {
       <Route path="/balances"><ProtectedRoute component={Balances} /></Route>
       <Route path="/supplier-balances"><ProtectedRoute component={SupplierBalances} /></Route>
       <Route path="/banks"><ProtectedRoute component={Banks} /></Route>
+      <Route path="/companies"><ProtectedRoute component={Companies} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

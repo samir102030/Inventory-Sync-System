@@ -93,6 +93,9 @@ function cashierMayPass(method: string, path: string) {
 // ما يُشترط فيه الأدمن
 // ---------------------------------------------------------------------------
 
+/** مسارات لا يفتحها إلا مالك النظام. */
+const OWNER_ONLY_PREFIXES = ["/companies"];
+
 /** مسارات لا يفتحها إلا الأدمن مهما كان نوع الطلب. */
 const ADMIN_ONLY_PREFIXES = ["/backup", "/users"];
 
@@ -117,8 +120,18 @@ export function requireRolePermissions(
   const path = req.path;
   const method = req.method;
 
-  // مالك النظام فوق الجميع.
-  if (role === "owner" || role === "admin") return next();
+  const isOwnerOnly = OWNER_ONLY_PREFIXES.some((p) => matches(path, p));
+
+  if (role === "owner") return next();
+
+  if (isOwnerOnly) {
+    return res.status(403).json({
+      error: "هذه الصفحة لمالك النظام فقط.",
+      code: "OWNER_REQUIRED",
+    });
+  }
+
+  if (role === "admin") return next();
 
   const isAdminOnly = ADMIN_ONLY_PREFIXES.some((p) => matches(path, p));
   const isAdminWrite =

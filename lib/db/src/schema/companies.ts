@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,6 +17,9 @@ export const companiesTable = pgTable("companies", {
   phone: text("phone"),
   email: text("email"),
   address: text("address"),
+  taxNumber: text("tax_number"),
+  /** تاريخ انتهاء الاشتراك. NULL = بلا نهاية محددة. */
+  subscriptionEndsAt: date("subscription_ends_at"),
   notes: text("notes"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

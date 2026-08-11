@@ -19,8 +19,14 @@ export const CASHIER_PAGES = [
   "/product-tracking",
 ];
 
+/** صفحات لا يفتحها إلا مالك النظام. */
+export const OWNER_PAGES = ["/companies"];
+
 export function canOpenPage(role: string | undefined, path: string): boolean {
-  if (role === "owner" || role === "admin") return true;
+  const ownerOnly = OWNER_PAGES.some((p) => path === p || path.startsWith(p + "/"));
+  if (role === "owner") return true;
+  if (ownerOnly) return false;
+  if (role === "admin") return true;
   if (role === "cashier") {
     return CASHIER_PAGES.some((p) => path === p || path.startsWith(p + "/"));
   }

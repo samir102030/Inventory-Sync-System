@@ -25,6 +25,7 @@ import rentalRouter from "./rental";
 import jam3iyyatRouter from "./jam3iyyat";
 import creditCardsRouter from "./credit-cards";
 import banksRouter from "./banks";
+import companiesRouter from "./companies";
 
 const router: IRouter = Router();
 
@@ -63,5 +64,6 @@ router.use(rentalRouter);
 router.use(jam3iyyatRouter);
 router.use(creditCardsRouter);
 router.use(banksRouter);
+router.use(companiesRouter);
 
 export default router;

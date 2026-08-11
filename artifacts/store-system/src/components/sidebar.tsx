@@ -97,6 +97,10 @@ const crmItems = [
   { title: "رسائل واتساب", url: "/whatsapp", icon: MessageCircle },
 ];
 
+const ownerItems = [
+  { title: "الشركات", url: "/companies", icon: Building2 },
+];
+
 const otherItems = [
   { title: "الرخص", url: "/licenses", icon: Key },
   { title: "التقارير", url: "/reports", icon: BarChart },
@@ -163,6 +167,7 @@ export function AppSidebar() {
         <NavGroup label="المالية" items={visibleFinanceItems} location={location} />
         <NavGroup label="المخزون" items={allowed(inventoryItems)} location={location} />
         <NavGroup label="أخرى" items={allowed(otherItems)} location={location} />
+        <NavGroup label="إدارة النظام" items={allowed(ownerItems)} location={location} />
       </SidebarContent>
       <SidebarFooter className="border-t p-4">
         <div className="flex items-center justify-between">

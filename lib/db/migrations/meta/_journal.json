@@ -15,6 +15,13 @@
       "when": 1786491000000,
       "tag": "0001_companies",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786492500000,
+      "tag": "0002_company_subscription",
+      "breakpoints": true
     }
   ]
 }
