@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,7 @@ type BalancesData = {
   totalOwedToCustomers: number;
 };
 
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 export default function Balances() {
   const { data, isLoading } = useQuery<BalancesData>({

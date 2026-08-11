@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -23,7 +24,7 @@ type Supplier = {
 };
 
 const BASE = "/api";
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 export default function Suppliers() {
   const [search, setSearch] = useState("");
@@ -49,17 +50,17 @@ export default function Suppliers() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: object) => fetch(`${BASE}/suppliers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: (data: object) => fetch(`${BASE}/suppliers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم إضافة المورد" }); qc.invalidateQueries({ queryKey: ["suppliers"] }); setIsDialogOpen(false); },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: object }) => fetch(`${BASE}/suppliers/${id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: ({ id, data }: { id: number; data: object }) => fetch(`${BASE}/suppliers/${id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم تحديث المورد" }); qc.invalidateQueries({ queryKey: ["suppliers"] }); qc.invalidateQueries({ queryKey: ["supplier-balances"] }); setIsDialogOpen(false); },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/suppliers/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+    mutationFn: (id: number) => fetch(`${BASE}/suppliers/${id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم حذف المورد" }); qc.invalidateQueries({ queryKey: ["suppliers"] }); },
   });
 

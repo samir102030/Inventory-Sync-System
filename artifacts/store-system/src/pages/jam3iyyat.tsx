@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,9 +33,9 @@ type Payment = {
   notes: string | null;
 };
 
-const fetchJam3iyyat = () => fetch("/api/jam3iyyat", { credentials: "include" }).then(r => r.json());
-const fetchPayments = (id: number) => fetch(`/api/jam3iyyat/${id}/payments`, { credentials: "include" }).then(r => r.json());
-const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
+const fetchJam3iyyat = () => fetch("/api/jam3iyyat", { credentials: "include" }).then(jsonOrThrow);
+const fetchPayments = (id: number) => fetch(`/api/jam3iyyat/${id}/payments`, { credentials: "include" }).then(jsonOrThrow);
+const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(jsonOrThrow);
 
 const emptyJamForm = () => ({
   name: "", totalMembers: "", amountPerMember: "", myTurn: "",

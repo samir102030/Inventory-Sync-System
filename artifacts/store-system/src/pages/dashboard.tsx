@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useGetSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { useRole } from "@/hooks/use-role";
@@ -11,7 +12,7 @@ type BalancesData = {
   totalOwedToCustomers: number;
 };
 
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 export default function Dashboard() {
   const { data: summary, isLoading } = useGetSummary();

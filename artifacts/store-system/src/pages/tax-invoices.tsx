@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -214,18 +215,18 @@ export default function TaxInvoices() {
 
   const { data, isLoading } = useQuery<{ invoices: TaxInvoice[]; totalTax: number; totalSubtotal: number; totalAmount: number; count: number }>({
     queryKey: ["tax-invoices", applied.from, applied.to],
-    queryFn: () => fetch(`/api/invoices/tax-ledger?from=${applied.from}&to=${applied.to}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`/api/invoices/tax-ledger?from=${applied.from}&to=${applied.to}`, { credentials: "include" }).then(jsonOrThrow),
   });
 
   const { data: detail } = useQuery<InvoiceDetail>({
     queryKey: ["invoice-detail", selectedId],
-    queryFn: () => fetch(`/api/invoices/${selectedId}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`/api/invoices/${selectedId}`, { credentials: "include" }).then(jsonOrThrow),
     enabled: selectedId != null,
   });
 
   const { data: settings } = useQuery<InvoiceSettings>({
     queryKey: ["invoice-settings"],
-    queryFn: () => fetch("/api/settings/invoice", { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch("/api/settings/invoice", { credentials: "include" }).then(jsonOrThrow),
   });
 
   const invoices = (data?.invoices ?? []).filter(inv =>

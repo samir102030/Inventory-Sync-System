@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,9 +26,9 @@ type CCTxn = {
   paidDate: string | null; accountId: number | null; notes: string | null;
 };
 
-const fetchCards = () => fetch("/api/credit-cards", { credentials: "include" }).then(r => r.json());
-const fetchTxns = (id: number) => fetch(`/api/credit-cards/${id}/transactions`, { credentials: "include" }).then(r => r.json());
-const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
+const fetchCards = () => fetch("/api/credit-cards", { credentials: "include" }).then(jsonOrThrow);
+const fetchTxns = (id: number) => fetch(`/api/credit-cards/${id}/transactions`, { credentials: "include" }).then(jsonOrThrow);
+const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(jsonOrThrow);
 
 const emptyCard = () => ({ name: "", lastFour: "", creditLimit: "", billingDay: "", notes: "" });
 const emptyTxn = (today: string) => ({ description: "", amount: "", transactionDate: today, dueDate: "", notes: "" });

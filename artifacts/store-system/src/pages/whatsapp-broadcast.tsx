@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,7 +18,7 @@ type Customer = {
 };
 
 const BASE = "/api";
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then((r) => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 function normalizePhone(phone: string): string {
   let p = phone.replace(/[\s\-().+]/g, "");

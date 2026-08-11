@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRole } from "@/hooks/use-role";
@@ -29,7 +30,7 @@ type Customer = { id: number; name: string };
 type Account = { id: number; name: string };
 
 const BASE = "/api";
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 const TYPE_LABEL: Record<string, string> = {
   payment: "سند قبض",
@@ -73,7 +74,7 @@ export default function ReceiptVouchers() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }).then(r => r.json()),
+      }).then(jsonOrThrow),
     onSuccess: () => {
       toast({ title: "تم تسجيل السند" });
       qc.invalidateQueries({ queryKey: ["receipt-vouchers"] });
@@ -87,7 +88,7 @@ export default function ReceiptVouchers() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) =>
-      fetch(`${BASE}/receipt-vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+      fetch(`${BASE}/receipt-vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
     onSuccess: () => {
       toast({ title: "تم حذف السند" });
       qc.invalidateQueries({ queryKey: ["receipt-vouchers"] });

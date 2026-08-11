@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,7 @@ type SupplierBalancesData = {
   totalOwedBySuppliers: number;
 };
 
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 export default function SupplierBalances() {
   const { data, isLoading } = useQuery<SupplierBalancesData>({

@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState, useRef, useEffect } from "react";
 import { useGetProducts, useGetCustomers, useCreateInvoice, useCreateCustomer, useGetCategories, useGetInvoiceSettings, getGetProductsQueryKey, getGetSummaryQueryKey, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -97,7 +98,7 @@ type CartItem = Product & { cartQuantity: number; discount: number; unitPrice: n
 type CreatedInvoice = { invoiceNumber: string; total: number; subtotal: number; discount: number; tax: number; paymentMethod: string; customerName?: string | null; customerWhatsapp?: string | null; createdAt: string; items?: Array<{ productName: string; quantity: number; unitPrice: number }> };
 type Account = { id: number; name: string; type: string };
 
-const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
+const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(jsonOrThrow);
 
 export default function POS() {
   const [search, setSearch] = useState("");

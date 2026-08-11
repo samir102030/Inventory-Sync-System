@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,7 +55,7 @@ export default function TaxLedger() {
   const { data, isLoading } = useQuery<TaxLedgerResponse>({
     queryKey: ["tax-ledger", applied.from, applied.to],
     queryFn: () =>
-      fetch(`/api/invoices/tax-ledger?from=${applied.from}&to=${applied.to}`, { credentials: "include" }).then(r => r.json()),
+      fetch(`/api/invoices/tax-ledger?from=${applied.from}&to=${applied.to}`, { credentials: "include" }).then(jsonOrThrow),
   });
 
   const handleApply = () => setApplied({ from, to });

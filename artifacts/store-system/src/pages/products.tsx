@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useRole } from "@/hooks/use-role";
 import { useState, useRef, useMemo } from "react";
 import * as XLSX from "@e965/xlsx";
@@ -170,7 +171,7 @@ export default function Products() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: items.filter(r => r._valid) }),
-      }).then(r => r.json()),
+      }).then(jsonOrThrow),
     onSuccess: (result) => {
       setImportResult(result);
       queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() });

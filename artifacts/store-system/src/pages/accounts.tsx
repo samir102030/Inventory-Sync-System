@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +27,7 @@ type Txn = {
 };
 
 const BASE = "/api";
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 const ACCOUNT_TYPES: Record<string, string> = { cash: "كاش", bank: "حساب بنكي", wallet: "محفظة إلكترونية", other: "أخرى" };
 const ACCOUNT_TYPE_OPTIONS = [
@@ -96,22 +97,22 @@ export default function Accounts() {
   });
 
   const createAccount = useMutation({
-    mutationFn: (data: object) => fetch(`${BASE}/accounts`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: (data: object) => fetch(`${BASE}/accounts`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم إضافة الحساب" }); qc.invalidateQueries({ queryKey: ["accounts"] }); setIsAccountDialog(false); resetAccountForm(); },
   });
 
   const updateAccount = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: object }) => fetch(`${BASE}/accounts/${id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: ({ id, data }: { id: number; data: object }) => fetch(`${BASE}/accounts/${id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم تحديث الحساب" }); qc.invalidateQueries({ queryKey: ["accounts"] }); setIsAccountDialog(false); resetAccountForm(); },
   });
 
   const deleteAccount = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/accounts/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+    mutationFn: (id: number) => fetch(`${BASE}/accounts/${id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم حذف الحساب" }); qc.invalidateQueries({ queryKey: ["accounts"] }); if (selectedAccountId) setSelectedAccountId(null); },
   });
 
   const createTxn = useMutation({
-    mutationFn: (data: object) => fetch(`${BASE}/accounts/transactions`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: (data: object) => fetch(`${BASE}/accounts/transactions`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: () => {
       toast({ title: txnDirection === "in" ? "تم تسجيل الوارد" : "تم تسجيل الصادر" });
       qc.invalidateQueries({ queryKey: ["accounts"] });
@@ -123,7 +124,7 @@ export default function Accounts() {
   });
 
   const deleteTxn = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/accounts/transactions/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+    mutationFn: (id: number) => fetch(`${BASE}/accounts/transactions/${id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["account-txns", selectedAccountId] }); },
   });
 
@@ -151,7 +152,7 @@ export default function Accounts() {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pinned: !account.pinned }),
-      }).then(r => r.json()),
+      }).then(jsonOrThrow),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
   });
 
@@ -188,7 +189,7 @@ export default function Accounts() {
   });
 
   const deleteBank = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/banks/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+    mutationFn: (id: number) => fetch(`${BASE}/banks/${id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["banks"] }); toast({ title: "تم الحذف" }); },
   });
 

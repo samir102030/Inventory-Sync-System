@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +18,7 @@ type SupplierCredit = { supplierId: number; supplierName: string; totalCredit: n
 type Account = { id: number; name: string };
 
 const BASE = "/api";
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 export default function CreditAccounts() {
   const [settleTarget, setSettleTarget] = useState<{ type: "customer" | "supplier"; id: number; name: string; balance: number } | null>(null);
@@ -44,7 +45,7 @@ export default function CreditAccounts() {
   const settleMutation = useMutation({
     mutationFn: (data: object) => {
       const url = settleTarget?.type === "customer" ? `${BASE}/receipt-vouchers` : `${BASE}/payment-vouchers`;
-      return fetch(url, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json());
+      return fetch(url, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow);
     },
     onSuccess: () => {
       toast({ title: "تم تسجيل التسديد بنجاح" });

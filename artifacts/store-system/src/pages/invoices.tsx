@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useRole } from "@/hooks/use-role";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,7 +20,7 @@ import { openWhatsApp, buildInvoiceMessage } from "@/lib/whatsapp";
 
 const BASE = "/api";
 const fetchJSON = (url: string, opts?: RequestInit) =>
-  fetch(url, { credentials: "include", ...opts }).then(r => r.json());
+  fetch(url, { credentials: "include", ...opts }).then(jsonOrThrow);
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")

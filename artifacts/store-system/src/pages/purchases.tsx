@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +23,7 @@ type PurchaseItem = { productId: number; productName: string; quantity: number; 
 type Purchase = { id: number; purchaseNumber: string; supplierName?: string | null; total: number; tax: number; taxRate: number; date: string; paymentMethod?: string; accountId?: number | null; notes?: string | null; isTaxable?: number; createdAt: string };
 
 const BASE = "/api";
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 /* ─── Product Combobox (Popover+Command via Portal) ─── */
 function ProductCombobox({ products, value, onSelect }: {
@@ -146,7 +147,7 @@ function SupplierCombobox({ suppliers, value, onChange, onAdded }: {
 
   const addMutation = useMutation({
     mutationFn: (data: object) =>
-      fetch(`${BASE}/suppliers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+      fetch(`${BASE}/suppliers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: (s) => {
       qc.invalidateQueries({ queryKey: ["suppliers"] });
       onAdded(s);
@@ -258,7 +259,7 @@ export default function Purchases() {
 
   const createMutation = useMutation({
     mutationFn: (data: object) =>
-      fetch(`${BASE}/purchases`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+      fetch(`${BASE}/purchases`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: () => {
       toast({ title: "تم تسجيل المشتريات" });
       qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -272,7 +273,7 @@ export default function Purchases() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) =>
-      fetch(`${BASE}/purchases/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+      fetch(`${BASE}/purchases/${id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
     onSuccess: () => {
       toast({ title: "تم حذف الطلب" });
       qc.invalidateQueries({ queryKey: ["purchases"] });

@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
 import { useRole } from "@/hooks/use-role";
+import { canOpenPage } from "@/lib/permissions";
 import { Button } from "./ui/button";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -103,6 +104,7 @@ const otherItems = [
 ];
 
 function NavGroup({ label, items, location }: { label: string; items: { title: string; url: string; icon: React.ComponentType<{ className?: string }> }[]; location: string }) {
+  if (items.length === 0) return null;
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
@@ -136,9 +138,15 @@ export function AppSidebar() {
     });
   };
 
-  const visibleFinanceItems = isAdmin
-    ? financeItems
-    : financeItems.filter(i => i.url !== "/receipt-vouchers" && i.url !== "/payment-vouchers");
+  // نخفي ما لا يستطيع المستخدم فتحه أصلاً، بدل أن يضغط ويجد رفضاً.
+  const allowed = (items: typeof salesItems) =>
+    items.filter(i => canOpenPage(user?.role, i.url));
+
+  const visibleFinanceItems = allowed(
+    isAdmin
+      ? financeItems
+      : financeItems.filter(i => i.url !== "/receipt-vouchers" && i.url !== "/payment-vouchers"),
+  );
 
   return (
     <Sidebar variant="inset" side="right" dir="rtl">
@@ -149,12 +157,12 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <NavGroup label="المبيعات" items={salesItems} location={location} />
-        <NavGroup label="المشتريات" items={purchaseItems} location={location} />
-        <NavGroup label="العملاء" items={crmItems} location={location} />
+        <NavGroup label="المبيعات" items={allowed(salesItems)} location={location} />
+        <NavGroup label="المشتريات" items={allowed(purchaseItems)} location={location} />
+        <NavGroup label="العملاء" items={allowed(crmItems)} location={location} />
         <NavGroup label="المالية" items={visibleFinanceItems} location={location} />
-        <NavGroup label="المخزون" items={inventoryItems} location={location} />
-        <NavGroup label="أخرى" items={otherItems} location={location} />
+        <NavGroup label="المخزون" items={allowed(inventoryItems)} location={location} />
+        <NavGroup label="أخرى" items={allowed(otherItems)} location={location} />
       </SidebarContent>
       <SidebarFooter className="border-t p-4">
         <div className="flex items-center justify-between">

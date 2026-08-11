@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useGetExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense, getGetExpensesQueryKey } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import type { Expense } from "@workspace/api-client-react/src/generated/api.schemas";
 
 type Account = { id: number; name: string };
-const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
+const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(jsonOrThrow);
 
 export default function Expenses() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);

@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,7 @@ type TrackingResult = {
   totalPurchaseCost: number;
 };
 
-const api = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const api = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 export default function ProductTracking() {
   const [search, setSearch] = useState("");

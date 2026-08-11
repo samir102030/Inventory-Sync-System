@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,7 @@ type TransferItem = { productId: number; productName?: string; quantity: number 
 type Transfer = { id: number; transferNumber: string; fromWarehouseId: number | null; toWarehouseId: number | null; fromWarehouseName: string | null; toWarehouseName: string | null; notes: string | null; createdAt: string; items?: TransferItem[] };
 type Product = { id: number; name: string; barcode: string | null; stock: number };
 
-const api = (url: string, opts?: RequestInit) => fetch(url, { credentials: "include", ...opts }).then(r => r.json());
+const api = (url: string, opts?: RequestInit) => fetch(url, { credentials: "include", ...opts }).then(jsonOrThrow);
 
 export default function Warehouses() {
   const { toast } = useToast();

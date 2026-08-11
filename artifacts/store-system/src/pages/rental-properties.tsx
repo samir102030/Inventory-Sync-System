@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,8 +25,8 @@ type RentalPayment = {
   notes: string | null;
 };
 
-const fetchRental = () => fetch("/api/rental", { credentials: "include" }).then(r => r.json());
-const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(r => r.json());
+const fetchRental = () => fetch("/api/rental", { credentials: "include" }).then(jsonOrThrow);
+const fetchAccounts = () => fetch("/api/accounts", { credentials: "include" }).then(jsonOrThrow);
 
 const emptyForm = () => ({
   propertyName: "", tenantName: "", amount: "", period: "",

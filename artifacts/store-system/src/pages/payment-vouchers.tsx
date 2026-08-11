@@ -1,3 +1,4 @@
+import { jsonOrThrow } from "@/lib/http";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRole } from "@/hooks/use-role";
@@ -18,7 +19,7 @@ type Supplier = { id: number; name: string };
 type Account = { id: number; name: string };
 
 const BASE = "/api";
-const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(r => r.json());
+const fetchJSON = (url: string) => fetch(url, { credentials: "include" }).then(jsonOrThrow);
 
 const CATEGORIES: Record<string, string> = { supplier: "مورد", employee: "موظف", other: "أخرى" };
 
@@ -35,13 +36,13 @@ export default function PaymentVouchers() {
   const { data: accounts = [] } = useQuery<Account[]>({ queryKey: ["accounts"], queryFn: () => fetchJSON(`${BASE}/accounts`) });
 
   const createMutation = useMutation({
-    mutationFn: (data: object) => fetch(`${BASE}/payment-vouchers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    mutationFn: (data: object) => fetch(`${BASE}/payment-vouchers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم تسجيل سند الصرف" }); qc.invalidateQueries({ queryKey: ["payment-vouchers"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["supplier-balances"] }); setIsDialogOpen(false); resetForm(); },
     onError: () => toast({ title: "حدث خطأ", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/payment-vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(r => r.json()),
+    mutationFn: (id: number) => fetch(`${BASE}/payment-vouchers/${id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
     onSuccess: () => { toast({ title: "تم حذف السند" }); qc.invalidateQueries({ queryKey: ["payment-vouchers"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); qc.invalidateQueries({ queryKey: ["supplier-balances"] }); },
   });
 
