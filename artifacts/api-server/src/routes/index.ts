@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { requireAuth, requireAdminForSensitivePaths } from "../middlewares/require-auth";
 import healthRouter from "./health";
 import authRouter from "./auth";
 import usersRouter from "./users";
@@ -27,8 +28,18 @@ import banksRouter from "./banks";
 
 const router: IRouter = Router();
 
+// --- مسارات عامة ------------------------------------------------------------
+// /healthz يحتاجه Render لفحص حالة الخدمة.
+// /auth/login و /auth/me و /auth/logout يجب أن تعمل قبل وجود جلسة.
+// (/auth/me يرجّع 401 بنفسه إن لم توجد جلسة، وهذا ما تعتمد عليه شاشة الدخول.)
 router.use(healthRouter);
 router.use(authRouter);
+
+// --- بوابة الحماية ----------------------------------------------------------
+// كل ما يأتي بعد هذين السطرين لا يُفتح إلا بجلسة صالحة.
+router.use(requireAuth);
+router.use(requireAdminForSensitivePaths);
+
 router.use(usersRouter);
 router.use(categoriesRouter);
 router.use(productsRouter);
