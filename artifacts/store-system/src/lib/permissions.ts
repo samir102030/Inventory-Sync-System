@@ -20,7 +20,7 @@ export const CASHIER_PAGES = [
 ];
 
 export function canOpenPage(role: string | undefined, path: string): boolean {
-  if (role === "admin") return true;
+  if (role === "owner" || role === "admin") return true;
   if (role === "cashier") {
     return CASHIER_PAGES.some((p) => path === p || path.startsWith(p + "/"));
   }

@@ -5,6 +5,20 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
+/**
+ * لا يمنح دور `owner` إلا مالك نظام. بدون هذا الفحص يستطيع أي أدمن شركة
+ * أن ينشئ لنفسه حساب مالك ويرى بيانات الشركات كلها.
+ */
+function rejectOwnerEscalation(req: any, res: any, requestedRole: unknown): boolean {
+  if (requestedRole !== "owner") return false;
+  if ((req.session as any)?.role === "owner") return false;
+  res.status(403).json({
+    error: "لا يمكن منح دور مالك النظام.",
+    code: "OWNER_ROLE_FORBIDDEN",
+  });
+  return true;
+}
+
 function serializeUser(user: typeof usersTable.$inferSelect) {
   return {
     id: user.id,
@@ -29,6 +43,7 @@ router.post("/users", async (req, res) => {
   if (!username || !password || !name) {
     return res.status(400).json({ error: "username, password, name required" });
   }
+  if (rejectOwnerEscalation(req, res, role)) return;
   const passwordHash = await bcrypt.hash(password, 10);
   const [user] = await db
     .insert(usersTable)
@@ -45,6 +60,7 @@ router.get("/users/:id", async (req, res) => {
 
 router.patch("/users/:id", async (req, res) => {
   const { username, password, name, role, phone, status } = req.body;
+  if (rejectOwnerEscalation(req, res, role)) return;
   const updates: Record<string, any> = {};
   if (username) updates.username = username;
   if (name) updates.name = name;

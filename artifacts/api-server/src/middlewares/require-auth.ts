@@ -117,7 +117,8 @@ export function requireRolePermissions(
   const path = req.path;
   const method = req.method;
 
-  if (role === "admin") return next();
+  // مالك النظام فوق الجميع.
+  if (role === "owner" || role === "admin") return next();
 
   const isAdminOnly = ADMIN_ONLY_PREFIXES.some((p) => matches(path, p));
   const isAdminWrite =
