@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireAuth, requireRolePermissions } from "../middlewares/require-auth";
+import { requireAuth, requireAdminForSensitivePaths } from "../middlewares/require-auth";
 import healthRouter from "./health";
 import authRouter from "./auth";
 import usersRouter from "./users";
@@ -38,7 +38,7 @@ router.use(authRouter);
 // --- بوابة الحماية ----------------------------------------------------------
 // كل ما يأتي بعد هذين السطرين لا يُفتح إلا بجلسة صالحة.
 router.use(requireAuth);
-router.use(requireRolePermissions);
+router.use(requireAdminForSensitivePaths);
 
 router.use(usersRouter);
 router.use(categoriesRouter);
