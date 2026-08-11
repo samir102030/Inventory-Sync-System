@@ -8,6 +8,13 @@
       "when": 1786382705688,
       "tag": "0000_flowery_mikhail_rasputin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786491000000,
+      "tag": "0001_companies",
+      "breakpoints": true
     }
   ]
 }

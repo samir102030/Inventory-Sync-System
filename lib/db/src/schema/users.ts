@@ -1,4 +1,5 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { companiesTable } from "./companies";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +13,11 @@ export const usersTable = pgTable("users", {
   phone: text("phone"),
   clerkUserId: text("clerk_user_id").unique(),
   status: text("status").notNull().default("active"),
+  /**
+   * الشركة التي ينتمي إليها المستخدم.
+   * NULL يعني مالك النظام (`owner`) — فوق الشركات كلها، لا داخل واحدة.
+   */
+  companyId: integer("company_id").references(() => companiesTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
