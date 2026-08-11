@@ -39,11 +39,17 @@ const CASHIER_READ = [
   "/invoices",
   "/quotations",
   "/warehouses",
+  "/warehouse-transfers",
   "/settings/invoice",
 ];
 
-/** استثناء: ملخص لوحة التحكم فقط، دون بقية التقارير. */
-const CASHIER_READ_EXACT = ["/reports/summary"];
+/**
+ * مسارات بعينها يحتاجها الكاشير، دون فتح ما حولها.
+ *
+ * `/accounts` تحديدًا: نقطة البيع وصفحة الفواتير تحتاجان قائمة الخزائن
+ * لتحديد أين تدخل النقدية. القائمة فقط — لا الحركات ولا التعديل.
+ */
+const CASHIER_READ_EXACT = ["/accounts"];
 
 /** كتابة: البيع وإنشاء العملاء وعروض الأسعار. */
 const CASHIER_WRITE: Array<{ method: string; prefix: string }> = [

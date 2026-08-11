@@ -6,7 +6,7 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Layout } from "@/components/layout";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { canOpenPage } from "@/lib/permissions";
+import { canOpenPage, homePathFor } from "@/lib/permissions";
 import { useLocation } from "wouter";
 
 import Login from "@/pages/login";
@@ -77,6 +77,13 @@ const queryClient = new QueryClient({
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+function HomeRedirect() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <div className="flex h-screen w-full items-center justify-center">جاري التحميل...</div>;
+  if (!user) return <Redirect to="/login" />;
+  return <Redirect to={homePathFor(user.role)} />;
+}
+
 function NoAccess() {
   return (
     <div dir="rtl" className="flex min-h-[60vh] flex-col items-center justify-center gap-3 p-8 text-center">
@@ -112,7 +119,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/"><Redirect to="/dashboard" /></Route>
+      <Route path="/"><HomeRedirect /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/pos"><ProtectedRoute component={POS} /></Route>
       <Route path="/invoices"><ProtectedRoute component={Invoices} /></Route>

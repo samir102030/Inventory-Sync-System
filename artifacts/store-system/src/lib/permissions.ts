@@ -8,7 +8,6 @@
 
 /** المسارات التي يفتحها الكاشير. ما عداها ممنوع. */
 export const CASHIER_PAGES = [
-  "/dashboard",
   "/pos",
   "/invoices",
   "/quotations",
@@ -26,4 +25,9 @@ export function canOpenPage(role: string | undefined, path: string): boolean {
     return CASHIER_PAGES.some((p) => path === p || path.startsWith(p + "/"));
   }
   return false;
+}
+
+/** الصفحة التي يبدأ منها كل دور بعد تسجيل الدخول. */
+export function homePathFor(role: string | undefined): string {
+  return role === "cashier" ? "/pos" : "/dashboard";
 }

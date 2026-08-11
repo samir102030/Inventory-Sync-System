@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLogin, useGetMe } from "@workspace/api-client-react";
+import { homePathFor } from "@/lib/permissions";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ export default function Login() {
   const { data: user } = useGetMe();
 
   useEffect(() => {
-    if (user) setLocation("/dashboard");
+    if (user) setLocation(homePathFor(user.role));
   }, [user]);
 
   if (user) return null;
@@ -27,8 +28,8 @@ export default function Login() {
     loginMutation.mutate(
       { data: { username, password } },
       {
-        onSuccess: () => {
-          setLocation("/dashboard");
+        onSuccess: (result: any) => {
+          setLocation(homePathFor(result?.user?.role));
         },
         onError: (error: any) => {
           const status = error?.status ?? error?.response?.status;
