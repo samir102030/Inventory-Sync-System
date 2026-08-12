@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { verifyCompanyIsolation } from "./lib/verify-isolation";
 
 const rawPort = process.env["PORT"];
 
@@ -14,6 +15,9 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+// لا يُفتح المنفذ قبل إثبات أن عزل الشركات مفروض من قاعدة البيانات.
+await verifyCompanyIsolation();
 
 app.listen(port, (err) => {
   if (err) {

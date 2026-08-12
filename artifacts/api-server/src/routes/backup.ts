@@ -9,9 +9,36 @@ import {
   warehousesTable, warehouseStockTable, warehouseTransfersTable, warehouseTransferItemsTable,
   projectsTable, usersTable, invoiceSettingsTable,
 } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
 
 const router = Router();
+
+/**
+ * النسخ الاحتياطي — بيانات شركة واحدة.
+ *
+ * القراءة والحذف والإدراج كلها تمر بسياسات RLS، فما يُصدَّر وما يُمسح هو
+ * صفوف الشركة الفعّالة وحدها. لهذا لا يوجد هنا أي `WHERE company_id = ...`:
+ * الفلترة في قاعدة البيانات لا في هذا الملف.
+ *
+ * ⚠️ TRUNCATE ممنوع هنا. TRUNCATE لا يخضع لـ RLS إطلاقًا — كان أدمن أي شركة
+ * يستطيع بضغطة "إعادة تعيين" أن يمسح بيانات كل الشركات. DELETE يخضع لها.
+ */
+
+/* ─── الترتيب الآمن للحذف: الأبناء أولًا ─── */
+const DELETE_ORDER = [
+  "warehouse_transfer_items", "warehouse_transfers", "warehouse_stock", "warehouses",
+  "invoice_return_items", "invoice_returns", "invoice_items", "invoices",
+  "quotation_items", "quotations", "purchase_items", "purchases",
+  "account_transactions", "receipt_vouchers", "payment_vouchers",
+  "salary_payments", "employees", "expenses", "licenses", "projects",
+  "products", "categories", "customers", "suppliers", "accounts",
+];
+
+async function wipeCompanyData() {
+  for (const table of DELETE_ORDER) {
+    await db.execute(sql.raw(`DELETE FROM "${table}"`));
+  }
+}
 
 /* ─── FULL BACKUP ─── */
 router.get("/backup/export", async (_req, res) => {
@@ -64,7 +91,7 @@ router.get("/backup/export", async (_req, res) => {
     });
 
   return res.json({
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     products: serialize(products),
     categories: serialize(categories),
@@ -98,119 +125,162 @@ router.get("/backup/export", async (_req, res) => {
 
 /* ─── FULL RESET ─── */
 router.post("/backup/reset", async (_req, res) => {
-  // Delete in FK-safe order (children first)
-  await db.execute(sql`
-    TRUNCATE TABLE
-      warehouse_transfer_items,
-      warehouse_transfers,
-      warehouse_stock,
-      warehouses,
-      invoice_return_items,
-      invoice_returns,
-      invoice_items,
-      invoices,
-      quotation_items,
-      quotations,
-      purchase_items,
-      purchases,
-      account_transactions,
-      receipt_vouchers,
-      payment_vouchers,
-      salary_payments,
-      employees,
-      expenses,
-      licenses,
-      projects,
-      products,
-      categories,
-      customers,
-      suppliers,
-      accounts
-    RESTART IDENTITY CASCADE
-  `);
-
+  await wipeCompanyData();
   return res.json({ ok: true });
 });
 
 /* ─── RESTORE FROM BACKUP ─── */
+
+/**
+ * الأرقام التسلسلية (`id`) مشتركة بين كل الشركات، فرقم 5 عند شركة يخص صفًا
+ * آخر تمامًا عند شركة ثانية. لذلك لا تُعاد الصفوف بأرقامها القديمة، بل
+ * تُدرَج بأرقام جديدة ويُترجم كل مرجع من الرقم القديم إلى الجديد.
+ *
+ * قبل هذا كانت الاستعادة تُدرج الأرقام كما هي مع `onConflictDoNothing`، فأي
+ * تصادم مع شركة أخرى كان يُسقط الصف بصمت وينتج نسخة ناقصة دون أي رسالة.
+ */
+type Restorable = {
+  key: string;
+  table: any;
+  /** اسم الحقل في النسخة ⇒ الجدول الذي يشير إليه. */
+  refs?: Record<string, string>;
+};
+
+const RESTORE_ORDER: Restorable[] = [
+  { key: "categories", table: categoriesTable },
+  { key: "suppliers", table: suppliersTable },
+  { key: "customers", table: customersTable },
+  { key: "warehouses", table: warehousesTable },
+  { key: "accounts", table: accountsTable },
+  { key: "employees", table: employeesTable },
+  { key: "projects", table: projectsTable, refs: { customerId: "customers" } },
+  { key: "products", table: productsTable, refs: { categoryId: "categories" } },
+  {
+    key: "invoices",
+    table: invoicesTable,
+    refs: { customerId: "customers", accountId: "accounts", projectId: "projects" },
+  },
+  {
+    key: "invoiceItems",
+    table: invoiceItemsTable,
+    refs: { invoiceId: "invoices", productId: "products" },
+  },
+  { key: "invoiceReturns", table: invoiceReturnsTable, refs: { invoiceId: "invoices" } },
+  {
+    key: "invoiceReturnItems",
+    table: invoiceReturnItemsTable,
+    refs: { returnId: "invoiceReturns", productId: "products" },
+  },
+  {
+    key: "quotations",
+    table: quotationsTable,
+    refs: { customerId: "customers", projectId: "projects" },
+  },
+  {
+    key: "quotationItems",
+    table: quotationItemsTable,
+    refs: { quotationId: "quotations", productId: "products" },
+  },
+  {
+    key: "purchases",
+    table: purchasesTable,
+    refs: { supplierId: "suppliers", accountId: "accounts" },
+  },
+  {
+    key: "purchaseItems",
+    table: purchaseItemsTable,
+    refs: { purchaseId: "purchases", productId: "products" },
+  },
+  { key: "accountTransactions", table: accountTransactionsTable, refs: { accountId: "accounts" } },
+  {
+    key: "receiptVouchers",
+    table: receiptVouchersTable,
+    refs: { accountId: "accounts", customerId: "customers" },
+  },
+  {
+    key: "paymentVouchers",
+    table: paymentVouchersTable,
+    refs: { accountId: "accounts", supplierId: "suppliers" },
+  },
+  {
+    key: "salaryPayments",
+    table: salaryPaymentsTable,
+    refs: { employeeId: "employees", accountId: "accounts" },
+  },
+  {
+    key: "warehouseStock",
+    table: warehouseStockTable,
+    refs: { warehouseId: "warehouses", productId: "products" },
+  },
+  {
+    key: "warehouseTransfers",
+    table: warehouseTransfersTable,
+    refs: { fromWarehouseId: "warehouses", toWarehouseId: "warehouses" },
+  },
+  {
+    key: "warehouseTransferItems",
+    table: warehouseTransferItemsTable,
+    refs: { transferId: "warehouseTransfers", productId: "products" },
+  },
+  { key: "expenses", table: expensesTable, refs: { accountId: "accounts", projectId: "projects" } },
+  { key: "licenses", table: licensesTable },
+];
+
+/**
+ * JSON لا يعرف التواريخ: `createdAt` يعود نصًّا بينما ينتظر Drizzle كائن
+ * `Date` ويستدعي عليه `toISOString`. كانت الاستعادة تسقط بـ 500 بسبب هذا.
+ */
+function reviveDates(table: any, row: Record<string, any>) {
+  for (const [key, column] of Object.entries(getTableColumns(table) as any)) {
+    const value = row[key];
+    if ((column as any).dataType === "date" && typeof value === "string") {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) row[key] = parsed;
+    }
+  }
+  return row;
+}
+
 router.post("/backup/restore", async (req, res) => {
   const data = req.body;
   if (!data || !data.exportedAt) {
     return res.status(400).json({ error: "ملف النسخة الاحتياطية غير صالح" });
   }
 
-  const chunk = async (table: any, rows: any[]) => {
-    if (!rows?.length) return;
-    // insert in batches of 100 to avoid huge queries
+  await wipeCompanyData();
+
+  /** الرقم القديم ⇒ الرقم الجديد، لكل جدول. */
+  const idMap: Record<string, Map<number, number>> = {};
+
+  for (const { key, table, refs } of RESTORE_ORDER) {
+    const rows: any[] = data[key] ?? [];
+    idMap[key] = new Map();
+    if (rows.length === 0) continue;
+
     for (let i = 0; i < rows.length; i += 100) {
-      await db.insert(table).values(rows.slice(i, i + 100)).onConflictDoNothing();
+      const batch = rows.slice(i, i + 100);
+
+      const values = batch.map((row) => {
+        // company_id يأتي من نطاق الطلب لا من الملف: نسخة شركة لا تُستعاد
+        // داخل شركة أخرى ولو حُرِّر الملف يدويًا.
+        const { id: _id, companyId: _companyId, ...rest } = row;
+
+        for (const [field, parent] of Object.entries(refs ?? {})) {
+          const old = rest[field];
+          rest[field] = old == null ? null : idMap[parent]?.get(Number(old)) ?? null;
+        }
+
+        return reviveDates(table, rest);
+      });
+
+      const inserted = await db.insert(table).values(values).returning({ id: table.id });
+
+      inserted.forEach((newRow: { id: number }, index: number) => {
+        const oldId = batch[index]?.id;
+        if (oldId != null) idMap[key].set(Number(oldId), newRow.id);
+      });
     }
-  };
-
-  // 1. Wipe everything first (same as reset)
-  await db.execute(sql`
-    TRUNCATE TABLE
-      warehouse_transfer_items, warehouse_transfers, warehouse_stock, warehouses,
-      invoice_return_items, invoice_returns, invoice_items, invoices,
-      quotation_items, quotations, purchase_items, purchases,
-      account_transactions, receipt_vouchers, payment_vouchers,
-      salary_payments, employees, expenses, licenses, projects,
-      products, categories, customers, suppliers, accounts
-    RESTART IDENTITY CASCADE
-  `);
-
-  // 2. Restore in FK-safe order (parents first)
-  await chunk(categoriesTable,           data.categories          ?? []);
-  await chunk(suppliersTable,            data.suppliers           ?? []);
-  await chunk(customersTable,            data.customers           ?? []);
-  await chunk(warehousesTable,           data.warehouses          ?? []);
-  await chunk(accountsTable,             data.accounts            ?? []);
-  await chunk(employeesTable,            data.employees           ?? []);
-  await chunk(productsTable,             data.products            ?? []);
-  await chunk(invoicesTable,             data.invoices            ?? []);
-  await chunk(invoiceItemsTable,         data.invoiceItems        ?? []);
-  await chunk(invoiceReturnsTable,       data.invoiceReturns      ?? []);
-  await chunk(invoiceReturnItemsTable,   data.invoiceReturnItems  ?? []);
-  await chunk(quotationsTable,           data.quotations          ?? []);
-  await chunk(quotationItemsTable,       data.quotationItems      ?? []);
-  await chunk(purchasesTable,            data.purchases           ?? []);
-  await chunk(purchaseItemsTable,        data.purchaseItems       ?? []);
-  await chunk(accountTransactionsTable,  data.accountTransactions ?? []);
-  await chunk(receiptVouchersTable,      data.receiptVouchers     ?? []);
-  await chunk(paymentVouchersTable,      data.paymentVouchers     ?? []);
-  await chunk(salaryPaymentsTable,       data.salaryPayments      ?? []);
-  await chunk(warehouseStockTable,       data.warehouseStock      ?? []);
-  await chunk(warehouseTransfersTable,   data.warehouseTransfers  ?? []);
-  await chunk(warehouseTransferItemsTable, data.warehouseTransferItems ?? []);
-  await chunk(expensesTable,             data.expenses            ?? []);
-  await chunk(licensesTable,             data.licenses            ?? []);
-  await chunk(projectsTable,             data.projects            ?? []);
-
-  // 3. Reset all sequences to max(id) so future inserts don't collide
-  await db.execute(sql`
-    SELECT setval(pg_get_serial_sequence('categories',           'id'), COALESCE(MAX(id),1)) FROM categories;
-    SELECT setval(pg_get_serial_sequence('suppliers',            'id'), COALESCE(MAX(id),1)) FROM suppliers;
-    SELECT setval(pg_get_serial_sequence('customers',            'id'), COALESCE(MAX(id),1)) FROM customers;
-    SELECT setval(pg_get_serial_sequence('warehouses',           'id'), COALESCE(MAX(id),1)) FROM warehouses;
-    SELECT setval(pg_get_serial_sequence('accounts',             'id'), COALESCE(MAX(id),1)) FROM accounts;
-    SELECT setval(pg_get_serial_sequence('employees',            'id'), COALESCE(MAX(id),1)) FROM employees;
-    SELECT setval(pg_get_serial_sequence('products',             'id'), COALESCE(MAX(id),1)) FROM products;
-    SELECT setval(pg_get_serial_sequence('invoices',             'id'), COALESCE(MAX(id),1)) FROM invoices;
-    SELECT setval(pg_get_serial_sequence('invoice_items',        'id'), COALESCE(MAX(id),1)) FROM invoice_items;
-    SELECT setval(pg_get_serial_sequence('invoice_returns',      'id'), COALESCE(MAX(id),1)) FROM invoice_returns;
-    SELECT setval(pg_get_serial_sequence('invoice_return_items', 'id'), COALESCE(MAX(id),1)) FROM invoice_return_items;
-    SELECT setval(pg_get_serial_sequence('quotations',           'id'), COALESCE(MAX(id),1)) FROM quotations;
-    SELECT setval(pg_get_serial_sequence('quotation_items',      'id'), COALESCE(MAX(id),1)) FROM quotation_items;
-    SELECT setval(pg_get_serial_sequence('purchases',            'id'), COALESCE(MAX(id),1)) FROM purchases;
-    SELECT setval(pg_get_serial_sequence('purchase_items',       'id'), COALESCE(MAX(id),1)) FROM purchase_items;
-    SELECT setval(pg_get_serial_sequence('account_transactions', 'id'), COALESCE(MAX(id),1)) FROM account_transactions;
-    SELECT setval(pg_get_serial_sequence('receipt_vouchers',     'id'), COALESCE(MAX(id),1)) FROM receipt_vouchers;
-    SELECT setval(pg_get_serial_sequence('payment_vouchers',     'id'), COALESCE(MAX(id),1)) FROM payment_vouchers;
-    SELECT setval(pg_get_serial_sequence('salary_payments',      'id'), COALESCE(MAX(id),1)) FROM salary_payments;
-    SELECT setval(pg_get_serial_sequence('expenses',             'id'), COALESCE(MAX(id),1)) FROM expenses;
-    SELECT setval(pg_get_serial_sequence('licenses',             'id'), COALESCE(MAX(id),1)) FROM licenses;
-    SELECT setval(pg_get_serial_sequence('projects',             'id'), COALESCE(MAX(id),1)) FROM projects;
-  `);
+  }
 
   return res.json({ ok: true });
 });

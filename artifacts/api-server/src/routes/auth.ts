@@ -1,11 +1,16 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "@workspace/db";
+import { companiesTable, db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const router = Router();
 
-function serializeUser(user: typeof usersTable.$inferSelect) {
+type CompanyRef = { id: number; name: string } | null;
+
+function serializeUser(
+  user: typeof usersTable.$inferSelect,
+  extra: { company?: CompanyRef; activeCompany?: CompanyRef } = {},
+) {
   return {
     id: user.id,
     username: user.username,
@@ -15,8 +20,22 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
     phone: user.phone,
     status: user.status,
     loginMethod: "password",
+    companyId: user.companyId,
+    /** شركة المستخدم نفسه (فارغة لمالك النظام). */
+    company: extra.company ?? null,
+    /** الشركة التي يعمل داخلها الآن — للمالك بعد التبديل. */
+    activeCompany: extra.activeCompany ?? null,
     createdAt: user.createdAt.toISOString(),
   };
+}
+
+async function loadCompany(id: number | null | undefined): Promise<CompanyRef> {
+  if (!id) return null;
+  const [company] = await db
+    .select({ id: companiesTable.id, name: companiesTable.name })
+    .from(companiesTable)
+    .where(eq(companiesTable.id, id));
+  return company ?? null;
 }
 
 router.post("/auth/login", async (req, res) => {
@@ -44,8 +63,14 @@ router.post("/auth/login", async (req, res) => {
 
     (req.session as any).userId = user.id;
     (req.session as any).role = user.role;
+    // شركة المستخدم — مصدرها الجلسة على الخادم لا العميل.
+    // NULL لمالك النظام: فوق الشركات كلها لا داخل واحدة.
+    (req.session as any).companyId = user.companyId ?? null;
+    (req.session as any).activeCompanyId = null;
 
-    return res.json({ user: serializeUser(user) });
+    return res.json({
+      user: serializeUser(user, { company: await loadCompany(user.companyId) }),
+    });
   } catch (error) {
     req.log?.error({ err: error }, "Password login failed because the database was unavailable");
     return res.status(503).json({
@@ -68,7 +93,17 @@ router.get("/auth/me", async (req, res) => {
   const user = users[0];
   if (!user) return res.status(401).json({ error: "User not found" });
 
-  return res.json(serializeUser(user));
+  // الدور في الجلسة قد يكون قديمًا (غُيِّر في قاعدة البيانات بعد الدخول).
+  // الجلسة هي مصدر الصلاحيات، فنبقيها متوافقة مع الحقيقة عند كل قراءة.
+  (req.session as any).role = user.role;
+  (req.session as any).companyId = user.companyId ?? null;
+
+  return res.json(
+    serializeUser(user, {
+      company: await loadCompany(user.companyId),
+      activeCompany: await loadCompany((req.session as any)?.activeCompanyId),
+    }),
+  );
 });
 
 export default router;

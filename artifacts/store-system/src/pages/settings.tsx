@@ -10,7 +10,8 @@ import {
   getGetInvoiceSettingsQueryKey,
   getGetUsersQueryKey
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { jsonOrThrow } from "@/lib/http";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -117,11 +118,26 @@ function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
   );
 }
 
+/**
+ * الشركة التي ينتمي إليها المستخدم. الخادم يرسل الحقلين مع كل مستخدم لكن
+ * مخطط OpenAPI لا يعرفهما بعد، والعميل المولّد لا يُحرَّر يدويًا.
+ */
+type UserWithCompany = User & { companyId?: number | null; companyName?: string | null };
+
+const companyOf = (user: User) => (user as UserWithCompany).companyName ?? null;
+
 function UsersManagement() {
   const { isOwner } = useRole();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formData, setFormData] = useState({ username: "", password: "", name: "", role: "cashier" as UserInputRole, phone: "" });
+  const [formData, setFormData] = useState({ username: "", password: "", name: "", role: "cashier" as UserInputRole, phone: "", companyId: "" });
+
+  /** قائمة الشركات لاختيار انتماء المستخدم — لمالك النظام وحده. */
+  const { data: companies = [] } = useQuery<Array<{ id: number; name: string }>>({
+    queryKey: ["companies", "picker"],
+    queryFn: () => fetch("/api/companies", { credentials: "include" }).then(jsonOrThrow),
+    enabled: isOwner,
+  });
 
   const { data: users, isLoading } = useGetUsers();
   const createUser = useCreateUser();
@@ -136,10 +152,17 @@ function UsersManagement() {
   const handleOpenDialog = (user?: User) => {
     if (user) {
       setEditingUser(user);
-      setFormData({ username: user.username, password: "", name: user.name, role: user.role as UserInputRole, phone: user.phone || "" });
+      setFormData({
+        username: user.username,
+        password: "",
+        name: user.name,
+        role: user.role as UserInputRole,
+        phone: user.phone || "",
+        companyId: String((user as UserWithCompany).companyId ?? ""),
+      });
     } else {
       setEditingUser(null);
-      setFormData({ username: "", password: "", name: "", role: "cashier", phone: "" });
+      setFormData({ username: "", password: "", name: "", role: "cashier", phone: "", companyId: "" });
     }
     setIsDialogOpen(true);
   };
@@ -151,7 +174,9 @@ function UsersManagement() {
       name: formData.name,
       role: formData.role,
       phone: formData.phone,
-      ...(formData.password ? { password: formData.password } : {})
+      ...(formData.password ? { password: formData.password } : {}),
+      // الشركة يرسلها المالك وحده؛ الخادم يتجاهلها من غيره ويستخدم شركته.
+      ...(isOwner ? { companyId: formData.companyId === "" ? null : Number(formData.companyId) } : {}),
     };
 
     if (editingUser) {
@@ -211,13 +236,14 @@ function UsersManagement() {
                 <TableHead>اسم المستخدم</TableHead>
                 <TableHead>رقم الهاتف</TableHead>
                 <TableHead>طريقة الدخول</TableHead>
+                <TableHead>الشركة</TableHead>
                 <TableHead>الصلاحية</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center h-24">جاري التحميل...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center h-24">جاري التحميل...</TableCell></TableRow>
               ) : (
                 activeUsers.map((user) => (
                   <TableRow key={user.id}>
@@ -228,6 +254,9 @@ function UsersManagement() {
                       <Badge variant={user.loginMethod === "google" ? "secondary" : "outline"}>
                         {user.loginMethod === "google" ? "جوجل" : "كلمة مرور"}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {companyOf(user) ?? <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>{ROLE_LABEL[user.role] ?? user.role}</TableCell>
                     <TableCell>
@@ -280,6 +309,26 @@ function UsersManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* المالك وحده ينقل المستخدمين بين الشركات. أدمن الشركة لا يرى
+                  هذا الحقل: مستخدموه يُنشأون داخل شركته تلقائيًا. */}
+              {isOwner && formData.role !== "owner" && (
+                <div className="space-y-2">
+                  <Label>الشركة</Label>
+                  <Select
+                    value={formData.companyId}
+                    onValueChange={v => setFormData({...formData, companyId: v})}
+                  >
+                    <SelectTrigger><SelectValue placeholder="اختر الشركة" /></SelectTrigger>
+                    <SelectContent>
+                      {companies.map(company => (
+                        <SelectItem key={company.id} value={String(company.id)}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex justify-end gap-2 mt-4">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>إلغاء</Button>
                 <Button type="submit" disabled={createUser.isPending || updateUser.isPending}>حفظ</Button>

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireRolePermissions } from "../middlewares/require-auth";
+import { companyScope } from "../middlewares/company-scope";
 import healthRouter from "./health";
 import authRouter from "./auth";
 import usersRouter from "./users";
@@ -40,6 +41,11 @@ router.use(authRouter);
 // كل ما يأتي بعد هذين السطرين لا يُفتح إلا بجلسة صالحة.
 router.use(requireAuth);
 router.use(requireRolePermissions);
+
+// --- نطاق الشركة -------------------------------------------------------------
+// بعد بوابة الحماية مباشرة: كل مسار مصادَق يعمل داخل معاملة تحمل هوية شركته.
+// أي مسار يوضع فوق هذا السطر يرى كل الشركات — لا تضع شيئًا فوقه.
+router.use(companyScope);
 
 router.use(usersRouter);
 router.use(categoriesRouter);

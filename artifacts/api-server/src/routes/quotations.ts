@@ -88,7 +88,7 @@ router.get("/quotations/:id", async (req, res) => {
     .from(quotationItemsTable)
     .where(eq(quotationItemsTable.quotationId, id));
 
-  res.json({
+  return res.json({
     ...formatQuotation(q, q.customerName),
     items: items.map(i => ({
       id: i.id,
@@ -135,7 +135,7 @@ router.post("/quotations", async (req, res) => {
     );
   }
 
-  res.json({ ...formatQuotation(quotation), items });
+  return res.json({ ...formatQuotation(quotation), items });
 });
 
 router.put("/quotations/:id", async (req, res) => {
@@ -173,7 +173,7 @@ router.put("/quotations/:id", async (req, res) => {
     );
   }
 
-  res.json({ ...formatQuotation(updated), items });
+  return res.json({ ...formatQuotation(updated), items });
 });
 
 router.patch("/quotations/:id/status", async (req, res) => {
@@ -181,7 +181,7 @@ router.patch("/quotations/:id/status", async (req, res) => {
   const { status } = req.body;
   const [updated] = await db.update(quotationsTable).set({ status }).where(eq(quotationsTable.id, id)).returning();
   if (!updated) return res.status(404).json({ error: "not found" });
-  res.json(formatQuotation(updated));
+  return res.json(formatQuotation(updated));
 });
 
 router.delete("/quotations/:id", async (req, res) => {
@@ -252,7 +252,7 @@ router.post("/quotations/:id/convert", async (req, res) => {
 
   await db.update(quotationsTable).set({ status: "converted" }).where(eq(quotationsTable.id, id));
 
-  res.json({ invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber });
+  return res.json({ invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber });
 });
 
 export default router;

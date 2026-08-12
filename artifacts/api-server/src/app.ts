@@ -5,7 +5,7 @@ import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pinoHttp from "pino-http";
-import { pool } from "@workspace/db";
+import { sessionPool } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -72,7 +72,8 @@ const PgSession = connectPgSimple(session);
 app.use(
   session({
     store: new PgSession({
-      pool,
+      // مخزن اتصالات خاص بالجلسات: المخزن العام محجوز لمعاملات الطلبات.
+      pool: sessionPool,
       tableName: "user_sessions",
       createTableIfMissing: false,
     }),

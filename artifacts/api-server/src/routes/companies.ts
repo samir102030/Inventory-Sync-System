@@ -102,6 +102,34 @@ router.patch("/companies/:id", async (req, res) => {
 });
 
 /**
+ * تبديل الشركة الفعّالة — لمالك النظام وحده.
+ *
+ * الشركة المختارة تُحفظ في الجلسة على الخادم، لا يرسلها العميل مع كل طلب:
+ * لو كان العميل هو من يحدد شركته، لكفى تعديل طلب واحد لرؤية شركة أخرى.
+ *
+ * بعد التبديل يرى المالك بيانات تلك الشركة وحدها، كأنه أدمن داخلها.
+ */
+router.post("/companies/:id/switch", async (req, res) => {
+  const id = Number(req.params.id);
+
+  const [company] = await db
+    .select({ id: companiesTable.id, name: companiesTable.name })
+    .from(companiesTable)
+    .where(eq(companiesTable.id, id));
+
+  if (!company) return res.status(404).json({ error: "الشركة غير موجودة." });
+
+  (req.session as any).activeCompanyId = company.id;
+  return res.json({ activeCompany: company });
+});
+
+/** العودة إلى رؤية كل الشركات. */
+router.post("/companies/switch/clear", (req, res) => {
+  (req.session as any).activeCompanyId = null;
+  return res.json({ activeCompany: null });
+});
+
+/**
  * لا حذف للشركات.
  *
  * حذف شركة يعني حذف بياناتها كلها — فواتير وعملاء وحسابات. الإيقاف

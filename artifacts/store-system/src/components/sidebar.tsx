@@ -46,6 +46,7 @@ import { useLogout, useGetMe } from "@workspace/api-client-react";
 import { useRole } from "@/hooks/use-role";
 import { canOpenPage } from "@/lib/permissions";
 import { Button } from "./ui/button";
+import { CompanySwitcher } from "./company-switcher";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "مالك النظام",
@@ -171,6 +172,8 @@ export function AppSidebar() {
         <NavGroup label="إدارة النظام" items={allowed(ownerItems)} location={location} />
       </SidebarContent>
       <SidebarFooter className="border-t p-4">
+        {/* الشركة الفعّالة أسفل القائمة تمامًا، بجوار اسم المستخدم وزر الخروج. */}
+        <CompanySwitcher />
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-sm font-medium">{user?.name || "المستخدم"}</span>

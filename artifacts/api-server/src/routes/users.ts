@@ -1,9 +1,25 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "@workspace/db";
+import { companiesTable, db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const router = Router();
+
+/**
+ * الشركة المطلوبة لمستخدم جديد أو منقول.
+ *
+ * مالك النظام وحده يختار الشركة صراحةً. أدمن الشركة لا يُسمح له بذلك: عمود
+ * `company_id` يتعبّأ تلقائيًا من نطاق طلبه، وسياسة RLS ترفض أي محاولة
+ * لوضع مستخدم في شركة أخرى — فالتجاهل هنا ليس ثغرة بل تبسيط.
+ */
+function requestedCompanyId(req: any): number | null | undefined {
+  if ((req.session as any)?.role !== "owner") return undefined;
+  const raw = req.body?.companyId;
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const id = Number(raw);
+  return Number.isFinite(id) ? id : undefined;
+}
 
 /**
  * لا يمنح دور `owner` إلا مالك نظام. بدون هذا الفحص يستطيع أي أدمن شركة
@@ -19,7 +35,10 @@ function rejectOwnerEscalation(req: any, res: any, requestedRole: unknown): bool
   return true;
 }
 
-function serializeUser(user: typeof usersTable.$inferSelect) {
+function serializeUser(
+  user: typeof usersTable.$inferSelect,
+  companyName: string | null = null,
+) {
   return {
     id: user.id,
     username: user.username,
@@ -29,25 +48,62 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
     phone: user.phone,
     status: user.status,
     loginMethod: user.clerkUserId ? "google" : "password",
+    companyId: user.companyId,
+    companyName,
     createdAt: user.createdAt.toISOString(),
   };
 }
 
+/** اسم الشركة لعرضه في الجدول. الأدمن يرى شركته وحدها فيكفيه استعلام واحد. */
+async function companyNames(ids: Array<number | null>) {
+  const names = new Map<number, string>();
+  for (const id of new Set(ids.filter((v): v is number => typeof v === "number"))) {
+    const [company] = await db
+      .select({ name: companiesTable.name })
+      .from(companiesTable)
+      .where(eq(companiesTable.id, id));
+    if (company) names.set(id, company.name);
+  }
+  return names;
+}
+
 router.get("/users", async (req, res) => {
   const users = await db.select().from(usersTable).orderBy(usersTable.name);
-  return res.json(users.map(serializeUser));
+  const names = await companyNames(users.map((u) => u.companyId));
+  return res.json(
+    users.map((u) => serializeUser(u, u.companyId ? names.get(u.companyId) ?? null : null)),
+  );
 });
 
 router.post("/users", async (req, res) => {
-  const { username, password, name, role, phone } = req.body;
+  const { username, password, name, role, phone, email } = req.body;
   if (!username || !password || !name) {
     return res.status(400).json({ error: "username, password, name required" });
   }
   if (rejectOwnerEscalation(req, res, role)) return;
+
+  const companyId = requestedCompanyId(req);
+  if ((req.session as any)?.role === "owner" && role !== "owner" && !companyId) {
+    return res.status(400).json({
+      error: "اختر الشركة التي ينتمي إليها المستخدم.",
+      code: "COMPANY_REQUIRED",
+    });
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
   const [user] = await db
     .insert(usersTable)
-    .values({ username, passwordHash, name, role: role || "cashier", phone, status: "active" })
+    .values({
+      username,
+      passwordHash,
+      name,
+      role: role || "cashier",
+      phone,
+      email: email || null,
+      status: "active",
+      // عند التجاهل يتولى العمود قيمته الافتراضية: شركة المستخدم الحالي.
+      ...(companyId === undefined ? {} : { companyId }),
+    })
     .returning();
   return res.status(201).json(serializeUser(user));
 });
@@ -100,6 +156,11 @@ router.patch("/users/:id", async (req, res) => {
   if (phone !== undefined) updates.phone = phone;
   if (status) updates.status = status;
   if (password) updates.passwordHash = await bcrypt.hash(password, 10);
+
+  // نقل مستخدم من شركة لأخرى — للمالك وحده، وسياسة RLS تحرس الباقي.
+  const companyId = requestedCompanyId(req);
+  if (companyId !== undefined) updates.companyId = companyId;
+
   const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, Number(req.params.id))).returning();
   if (!user) return res.status(404).json({ error: "Not found" });
   return res.json(serializeUser(user));
