@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, purchasesTable, purchaseItemsTable, productsTable, suppliersTable, accountTransactionsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { nextDocumentNumber } from "../lib/document-number";
 
 const router = Router();
 
@@ -56,8 +57,7 @@ router.post("/purchases", async (req, res) => {
   const taxAmt = subtotal * (rate / 100);
   const total = subtotal + taxAmt;
 
-  const [{ cnt }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(purchasesTable);
-  const purchaseNumber = `PUR-${String(Number(cnt) + 1).padStart(4, "0")}`;
+  const purchaseNumber = await nextDocumentNumber("purchases", "purchase_number", "PUR", 4);
 
   const supplierLabel = supplierId
     ? (await db.select({ name: suppliersTable.name }).from(suppliersTable).where(eq(suppliersTable.id, supplierId)).limit(1))[0]?.name ?? supplierName ?? null

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, warehousesTable, warehouseStockTable, warehouseTransfersTable, warehouseTransferItemsTable, productsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
+import { nextDocumentNumber } from "../lib/document-number";
 
 const router = Router();
 
@@ -141,9 +142,7 @@ router.post("/warehouse-transfers", async (req, res) => {
     }
   }
 
-  // Generate transfer number
-  const [{ cnt }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(warehouseTransfersTable);
-  const transferNumber = `TRF-${String(Number(cnt) + 1).padStart(4, "0")}`;
+  const transferNumber = await nextDocumentNumber("warehouse_transfers", "transfer_number", "TRF", 4);
 
   const [transfer] = await db.insert(warehouseTransfersTable).values({
     transferNumber,

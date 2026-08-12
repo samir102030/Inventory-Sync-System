@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, invoiceSettingsTable, invoiceReturnsTable, invoiceReturnItemsTable, accountTransactionsTable } from "@workspace/db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { nextDocumentNumber } from "../lib/document-number";
 
 const router = Router();
 
@@ -28,15 +29,11 @@ function formatInvoice(inv: any, customerName?: string | null, customerWhatsapp?
 async function generateInvoiceNumber() {
   const settings = await db.select().from(invoiceSettingsTable).limit(1);
   const prefix = settings[0]?.invoicePrefix ?? "INV";
-  const count = await db.select({ cnt: sql<number>`COUNT(*)` }).from(invoicesTable);
-  const num = (Number(count[0]?.cnt ?? 0) + 1).toString().padStart(5, "0");
-  return `${prefix}-${num}`;
+  return nextDocumentNumber("invoices", "invoice_number", prefix);
 }
 
-async function generateReturnNumber(invoiceNumber: string) {
-  const count = await db.select({ cnt: sql<number>`COUNT(*)` }).from(invoiceReturnsTable);
-  const num = (Number(count[0]?.cnt ?? 0) + 1).toString().padStart(5, "0");
-  return `RET-${num}`;
+async function generateReturnNumber(_invoiceNumber: string) {
+  return nextDocumentNumber("invoice_returns", "return_number", "RET");
 }
 
 router.get("/invoices/tax-ledger", async (req, res) => {

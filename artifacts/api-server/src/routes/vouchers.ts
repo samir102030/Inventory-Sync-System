@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, receiptVouchersTable, paymentVouchersTable, customersTable, suppliersTable, accountTransactionsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { nextDocumentNumber } from "../lib/document-number";
 
 const router = Router();
 
@@ -15,8 +16,7 @@ router.post("/receipt-vouchers", async (req, res) => {
   const { customerId, customerName, amount, date, accountId, reference, notes, type } = req.body;
   if (!amount || !date) return res.status(400).json({ error: "amount and date required" });
 
-  const [{ cnt }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(receiptVouchersTable);
-  const voucherNumber = `RV-${String(Number(cnt) + 1).padStart(4, "0")}`;
+  const voucherNumber = await nextDocumentNumber("receipt_vouchers", "voucher_number", "RV", 4);
 
   const custLabel = customerId
     ? (await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, customerId)).limit(1))[0]?.name ?? customerName ?? null
@@ -110,8 +110,7 @@ router.post("/payment-vouchers", async (req, res) => {
   const { supplierId, paidTo, category, amount, date, accountId, reference, notes } = req.body;
   if (!paidTo || !amount || !date) return res.status(400).json({ error: "paidTo, amount and date required" });
 
-  const [{ cnt }] = await db.select({ cnt: sql<number>`COUNT(*)` }).from(paymentVouchersTable);
-  const voucherNumber = `PV-${String(Number(cnt) + 1).padStart(4, "0")}`;
+  const voucherNumber = await nextDocumentNumber("payment_vouchers", "voucher_number", "PV", 4);
 
   const supplLabel = supplierId
     ? (await db.select({ name: suppliersTable.name }).from(suppliersTable).where(eq(suppliersTable.id, supplierId)).limit(1))[0]?.name ?? paidTo
