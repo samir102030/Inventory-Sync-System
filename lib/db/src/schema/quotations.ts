@@ -31,6 +31,8 @@ export const quotationItemsTable = pgTable("quotation_items", {
   productName: text("product_name").notNull(),
   quantity: numeric("quantity", { precision: 10, scale: 3 }).notNull(),
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+  /** خصم هذا البند وحده، بنفس شكل `invoice_items.discount`. */
+  discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 12, scale: 2 }).notNull(),
 });
 

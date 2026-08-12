@@ -43,6 +43,13 @@
       "when": 1786620000000,
       "tag": "0005_self_signup",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786630000000,
+      "tag": "0006_quotation_item_discount",
+      "breakpoints": true
     }
   ]
 }

@@ -70,6 +70,12 @@ const CASHIER_NEVER = [
   "/products/bulk-delete",
   "/products/import",
   "/customers/bulk-import",
+  /**
+   * تتبع المنتج يعرض تكلفة الشراء وهامش الربح لكل صنف. الصفحة مخفية عن
+   * الكاشير في الواجهة، وهذا السطر يمنعه من المسار نفسه — الإخفاء وحده
+   * ليس منعًا.
+   */
+  "/products/tracking",
 ];
 
 function cashierMayPass(method: string, path: string) {

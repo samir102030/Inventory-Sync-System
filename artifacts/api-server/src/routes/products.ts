@@ -4,13 +4,24 @@ import { eq, and, ilike, lte, sql, or } from "drizzle-orm";
 
 const router = Router();
 
-function formatProduct(p: any, categoryName?: string | null) {
+/**
+ * سعر التكلفة لا يُرسَل إلى الكاشير.
+ *
+ * صفحة المنتجات كانت تخفي العمود في الواجهة بينما يواصل الخادم إرساله في
+ * الرد، فيقرأه أي كاشير من أدوات المطوّر في المتصفح. الإخفاء في الواجهة
+ * ترتيبٌ للشاشة لا حمايةٌ للبيانات؛ الحذف من الرد هو الحماية.
+ */
+function maySeeCost(req: any) {
+  return (req.session as any)?.role !== "cashier";
+}
+
+function formatProduct(p: any, categoryName?: string | null, withCost = true) {
   return {
     id: p.id,
     name: p.name,
     description: p.description ?? null,
     price: Number(p.price),
-    costPrice: p.costPrice != null ? Number(p.costPrice) : null,
+    costPrice: withCost && p.costPrice != null ? Number(p.costPrice) : null,
     categoryId: p.categoryId,
     categoryName: categoryName ?? null,
     stock: p.stock,
@@ -51,7 +62,8 @@ router.get("/products", async (req, res) => {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(productsTable.categoryId, productsTable.name);
 
-  return res.json(rows.map(r => formatProduct(r, r.categoryName)));
+  const withCost = maySeeCost(req);
+  return res.json(rows.map(r => formatProduct(r, r.categoryName, withCost)));
 });
 
 router.post("/products", async (req, res) => {
@@ -65,7 +77,7 @@ router.post("/products", async (req, res) => {
   }).returning();
 
   const cats = await db.select().from(categoriesTable).where(eq(categoriesTable.id, p.categoryId)).limit(1);
-  return res.status(201).json(formatProduct(p, cats[0]?.name));
+  return res.status(201).json(formatProduct(p, cats[0]?.name, maySeeCost(req)));
 });
 
 router.get("/products/tracking", async (req, res) => {
@@ -111,7 +123,7 @@ router.get("/products/:id", async (req, res) => {
     .from(productsTable).leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
     .where(eq(productsTable.id, Number(req.params.id))).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Not found" });
-  return res.json(formatProduct(rows[0], rows[0].categoryName));
+  return res.json(formatProduct(rows[0], rows[0].categoryName, maySeeCost(req)));
 });
 
 router.patch("/products/:id", async (req, res) => {

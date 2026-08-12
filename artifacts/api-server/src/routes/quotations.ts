@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, quotationsTable, quotationItemsTable, customersTable, productsTable, invoicesTable, invoiceItemsTable, invoiceSettingsTable } from "@workspace/db";
+import { db, quotationsTable, quotationItemsTable, customersTable, productsTable, invoicesTable, invoiceItemsTable, invoiceSettingsTable, usersTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
 
 const router = Router();
@@ -15,6 +15,56 @@ async function generateQuotationNumber() {
     .from(quotationsTable);
   const num = (Number(row?.max ?? 0) + 1).toString().padStart(5, "0");
   return `QUO-${num}`;
+}
+
+/**
+ * حساب العرض: مجموع البنود بعد خصم كل بند، ثم الخصم العام، ثم الضريبة.
+ *
+ * الضريبة تُحسب من نسبة `invoice_settings.tax_rate` على الصافي بعد الخصم،
+ * لا تُكتب مبلغًا يدويًا كما كان. العميل يستطيع تجاوزها بإرسال `tax` صراحةً
+ * — بعض العروض تُسعَّر بمبلغ ضريبة متفق عليه.
+ */
+async function priceQuotation(items: any[], discount: unknown, tax: unknown) {
+  const lines = items.map((i: any) => {
+    const quantity = Number(i.quantity) || 0;
+    const unitPrice = Number(i.unitPrice) || 0;
+    const lineDiscount = Number(i.discount ?? 0) || 0;
+    return { ...i, quantity, unitPrice, discount: lineDiscount, total: quantity * unitPrice - lineDiscount };
+  });
+
+  const subtotal = lines.reduce((sum, line) => sum + line.total, 0);
+  const discountAmount = Number(discount ?? 0) || 0;
+  const net = subtotal - discountAmount;
+
+  let taxAmount: number;
+  if (tax === undefined || tax === null || tax === "") {
+    const [settings] = await db
+      .select({ rate: invoiceSettingsTable.taxRate, showTax: invoiceSettingsTable.showTax })
+      .from(invoiceSettingsTable)
+      .limit(1);
+    const rate = settings?.showTax ? Number(settings.rate ?? 0) : 0;
+    taxAmount = Math.round(net * (rate / 100) * 100) / 100;
+  } else {
+    taxAmount = Number(tax) || 0;
+  }
+
+  return { lines, subtotal, discountAmount, taxAmount, total: net + taxAmount };
+}
+
+/**
+ * من أنشأ المستند.
+ *
+ * كان يقرأ `req.session.user?.username` وهذا الحقل لا يُضبط إطلاقًا — الجلسة
+ * تحفظ `userId` و `role` فقط — فكان `created_by` فارغًا في كل عرض سعر.
+ */
+async function currentUserName(req: any): Promise<string | null> {
+  const userId = (req.session as any)?.userId;
+  if (!userId) return null;
+  const [user] = await db
+    .select({ name: usersTable.name })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+  return user?.name ?? null;
 }
 
 function formatQuotation(q: any, customerName?: string | null) {
@@ -96,62 +146,62 @@ router.get("/quotations/:id", async (req, res) => {
       productName: i.productName,
       quantity: Number(i.quantity),
       unitPrice: Number(i.unitPrice),
+      discount: Number(i.discount ?? 0),
       total: Number(i.total),
     })),
   });
 });
 
 router.post("/quotations", async (req, res) => {
-  const { customerId, customerName, items = [], discount = 0, tax = 0, notes, validUntil } = req.body;
+  const { customerId, customerName, items = [], discount = 0, tax, notes, validUntil } = req.body;
   const quotationNumber = await generateQuotationNumber();
 
-  const subtotal = items.reduce((s: number, i: any) => s + i.quantity * i.unitPrice, 0);
-  const total = subtotal - Number(discount) + Number(tax);
+  const priced = await priceQuotation(items, discount, tax);
 
   const [quotation] = await db.insert(quotationsTable).values({
     quotationNumber,
     customerId: customerId || null,
     customerName: customerName || null,
-    subtotal: String(subtotal),
-    discount: String(discount),
-    tax: String(tax),
-    total: String(total),
+    subtotal: String(priced.subtotal),
+    discount: String(priced.discountAmount),
+    tax: String(priced.taxAmount),
+    total: String(priced.total),
     status: "draft",
     notes: notes || null,
     validUntil: validUntil || null,
-    createdBy: (req.session as any)?.user?.username ?? null,
+    createdBy: await currentUserName(req),
   }).returning();
 
-  if (items.length > 0) {
+  if (priced.lines.length > 0) {
     await db.insert(quotationItemsTable).values(
-      items.map((i: any) => ({
+      priced.lines.map((i: any) => ({
         quotationId: quotation.id,
         productId: i.productId || null,
         productName: i.productName,
         quantity: String(i.quantity),
         unitPrice: String(i.unitPrice),
-        total: String(i.quantity * i.unitPrice),
+        discount: String(i.discount),
+        total: String(i.total),
       }))
     );
   }
 
-  return res.json({ ...formatQuotation(quotation), items });
+  return res.json({ ...formatQuotation(quotation), items: priced.lines });
 });
 
 router.put("/quotations/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { customerId, customerName, items = [], discount = 0, tax = 0, notes, validUntil, status } = req.body;
+  const { customerId, customerName, items = [], discount = 0, tax, notes, validUntil, status } = req.body;
 
-  const subtotal = items.reduce((s: number, i: any) => s + i.quantity * i.unitPrice, 0);
-  const total = subtotal - Number(discount) + Number(tax);
+  const priced = await priceQuotation(items, discount, tax);
 
   const [updated] = await db.update(quotationsTable).set({
     customerId: customerId || null,
     customerName: customerName || null,
-    subtotal: String(subtotal),
-    discount: String(discount),
-    tax: String(tax),
-    total: String(total),
+    subtotal: String(priced.subtotal),
+    discount: String(priced.discountAmount),
+    tax: String(priced.taxAmount),
+    total: String(priced.total),
     status: status || "draft",
     notes: notes || null,
     validUntil: validUntil || null,
@@ -160,20 +210,21 @@ router.put("/quotations/:id", async (req, res) => {
   if (!updated) return res.status(404).json({ error: "not found" });
 
   await db.delete(quotationItemsTable).where(eq(quotationItemsTable.quotationId, id));
-  if (items.length > 0) {
+  if (priced.lines.length > 0) {
     await db.insert(quotationItemsTable).values(
-      items.map((i: any) => ({
+      priced.lines.map((i: any) => ({
         quotationId: id,
         productId: i.productId || null,
         productName: i.productName,
         quantity: String(i.quantity),
         unitPrice: String(i.unitPrice),
-        total: String(i.quantity * i.unitPrice),
+        discount: String(i.discount),
+        total: String(i.total),
       }))
     );
   }
 
-  return res.json({ ...formatQuotation(updated), items });
+  return res.json({ ...formatQuotation(updated), items: priced.lines });
 });
 
 router.patch("/quotations/:id/status", async (req, res) => {
@@ -233,7 +284,7 @@ router.post("/quotations/:id/convert", async (req, res) => {
     paymentMethod: "cash",
     status: "draft",
     notes: q.notes,
-    createdBy: (req.session as any)?.user?.username ?? null,
+    createdBy: await currentUserName(req),
   }).returning();
 
   if (items.length > 0) {
@@ -244,7 +295,8 @@ router.post("/quotations/:id/convert", async (req, res) => {
         productName: i.productName,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
-        discount: "0",
+        // خصم البند ينتقل مع البند: بدونه ترتفع الفاتورة عن العرض المتفق عليه.
+        discount: i.discount ?? "0",
         total: i.total,
       }))
     );

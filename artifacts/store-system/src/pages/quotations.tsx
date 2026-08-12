@@ -39,7 +39,17 @@ function safeSrcUrl(url: string): string {
   return "";
 }
 
-type QItem = { productId?: number | null; productName: string; quantity: number; unitPrice: number };
+type QItem = {
+  productId?: number | null;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  /** خصم هذا البند وحده، قبل الخصم العام على العرض. */
+  discount?: number;
+};
+
+/** صافي البند بعد خصمه. مرجع واحد للحساب في الشاشة كلها. */
+const lineTotal = (item: QItem) => item.quantity * item.unitPrice - (item.discount ?? 0);
 type Quotation = {
   id: number; quotationNumber: string; customerId?: number | null; customerName?: string | null;
   subtotal: number; discount: number; tax: number; total: number;
@@ -97,7 +107,8 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">${escapeHtml(item.productName)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${item.quantity}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">${Number(item.unitPrice).toFixed(2)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:bold;">${(item.quantity * item.unitPrice).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;color:#dc2626;">${Number(item.discount ?? 0) > 0 ? `-${Number(item.discount).toFixed(2)}` : "—"}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:bold;">${lineTotal(item).toFixed(2)}</td>
     </tr>`).join("");
 
   return `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;background:#fff;padding:24px;direction:rtl;">
@@ -130,6 +141,7 @@ function buildQuotationHTML(q: Quotation, settings: any): string {
       <th style="padding:10px 12px;text-align:right;">المنتج / الخدمة</th>
       <th style="padding:10px 12px;text-align:center;">الكمية</th>
       <th style="padding:10px 12px;text-align:center;">سعر الوحدة (ج.م)</th>
+      <th style="padding:10px 12px;text-align:center;">الخصم (ج.م)</th>
       <th style="padding:10px 12px;text-align:center;">المجموع (ج.م)</th>
     </tr></thead>
     <tbody>${itemRows}</tbody>
@@ -231,6 +243,7 @@ function ItemsEditor({ items, onChange }: { items: QItem[]; onChange: (items: QI
                 <TableHead>المنتج / الخدمة</TableHead>
                 <TableHead className="w-24">الكمية</TableHead>
                 <TableHead className="w-32">السعر (ج.م)</TableHead>
+                <TableHead className="w-28">خصم البند</TableHead>
                 <TableHead className="w-28 text-left">المجموع</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
@@ -251,8 +264,13 @@ function ItemsEditor({ items, onChange }: { items: QItem[]; onChange: (items: QI
                       onChange={e => updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0)}
                       className="h-8 w-28 text-sm" />
                   </TableCell>
+                  <TableCell>
+                    <Input type="number" min="0" step="0.01" value={item.discount ?? 0}
+                      onChange={e => updateItem(idx, "discount", parseFloat(e.target.value) || 0)}
+                      className="h-8 w-24 text-sm" />
+                  </TableCell>
                   <TableCell className="text-left font-bold text-sm">
-                    {(item.quantity * item.unitPrice).toFixed(2)} ج.م
+                    {lineTotal(item).toFixed(2)} ج.م
                   </TableCell>
                   <TableCell>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive"
@@ -278,7 +296,20 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
     queryFn: () => fetchJSON(`${BASE}/customers`),
   });
 
+  /**
+   * نسبة الضريبة من إعدادات الفاتورة.
+   *
+   * كانت الضريبة تُكتب مبلغًا يدويًا في كل عرض رغم وجود `taxRate` في
+   * الإعدادات منذ البداية. الآن تُحسب تلقائيًا، مع إبقاء إمكانية التجاوز
+   * لأن بعض العروض تُسعَّر بمبلغ متفق عليه.
+   */
+  const { data: settings } = useQuery<{ taxRate: number; showTax: boolean }>({
+    queryKey: ["settings", "invoice"],
+    queryFn: () => fetchJSON(`${BASE}/settings/invoice`),
+  });
+
   const [items, setItems] = useState<QItem[]>(quotation?.items || []);
+  const [manualTax, setManualTax] = useState(Boolean(quotation && Number(quotation.tax) > 0));
   const [formData, setFormData] = useState({
     customerId: quotation?.customerId?.toString() || "",
     discount: quotation?.discount?.toString() || "0",
@@ -323,10 +354,14 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
     onError: () => toast({ title: "فشل إضافة العميل", variant: "destructive" }),
   });
 
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const subtotal = items.reduce((s, i) => s + lineTotal(i), 0);
   const discount = parseFloat(formData.discount) || 0;
-  const tax = parseFloat(formData.tax) || 0;
-  const total = subtotal - discount + tax;
+  const net = subtotal - discount;
+  const taxRate = settings?.showTax ? Number(settings.taxRate ?? 0) : 0;
+  // نفس معادلة الخادم بالضبط، وإلا اختلف ما يراه المستخدم عمّا يُحفظ.
+  const autoTax = Math.round(net * (taxRate / 100) * 100) / 100;
+  const tax = manualTax ? parseFloat(formData.tax) || 0 : autoTax;
+  const total = net + tax;
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => fetchJSON(
@@ -350,7 +385,8 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
       customerName: customer?.name || null,
       items,
       discount,
-      tax,
+      // بلا قيمة ⇒ يحسبها الخادم من الإعدادات. مع قيمة ⇒ تجاوز يدوي.
+      tax: manualTax ? tax : undefined,
       notes: formData.notes || null,
       validUntil: formData.validUntil || null,
     });
@@ -483,9 +519,31 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
             onChange={e => setFormData(f => ({ ...f, discount: e.target.value }))} />
         </div>
         <div className="space-y-2">
-          <Label>الضريبة (ج.م)</Label>
-          <Input type="number" min="0" step="0.01" value={formData.tax}
-            onChange={e => setFormData(f => ({ ...f, tax: e.target.value }))} />
+          <div className="flex items-center justify-between">
+            <Label>الضريبة (ج.م)</Label>
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() => {
+                // عند التبديل لليدوي نبدأ من القيمة المحسوبة، فلا يفاجأ المستخدم بصفر.
+                if (!manualTax) setFormData(f => ({ ...f, tax: autoTax.toFixed(2) }));
+                setManualTax(!manualTax);
+              }}
+            >
+              {manualTax ? "احسبها تلقائيًا" : "أدخلها يدويًا"}
+            </button>
+          </div>
+          {manualTax ? (
+            <Input type="number" min="0" step="0.01" value={formData.tax}
+              onChange={e => setFormData(f => ({ ...f, tax: e.target.value }))} />
+          ) : (
+            <div className="flex h-10 items-center rounded-md bg-muted px-3">
+              {autoTax.toFixed(2)}
+              <span className="mr-2 text-xs text-muted-foreground">
+                {taxRate > 0 ? `(${taxRate}%)` : "(الضريبة مغلقة في الإعدادات)"}
+              </span>
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           <Label>الإجمالي</Label>
@@ -578,6 +636,7 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
             <TableHead>المنتج / الخدمة</TableHead>
             <TableHead>الكمية</TableHead>
             <TableHead>السعر</TableHead>
+            <TableHead>الخصم</TableHead>
             <TableHead className="text-left">المجموع</TableHead>
             <TableHead className="text-left text-green-700">الربح 🔒</TableHead>
           </TableRow>
@@ -586,13 +645,17 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
           {full.items?.map((item, idx) => {
             const product = (products as Product[]).find(p => p.id === item.productId);
             const cost = product?.costPrice ?? 0;
-            const itemProfit = (item.unitPrice - cost) * item.quantity;
+            // الخصم يقلّل الربح فعلًا، فيُطرح منه لا من الإجمالي وحده.
+            const itemProfit = (item.unitPrice - cost) * item.quantity - (item.discount ?? 0);
             return (
               <TableRow key={idx}>
                 <TableCell>{item.productName}</TableCell>
                 <TableCell>{item.quantity}</TableCell>
                 <TableCell>{Number(item.unitPrice).toFixed(2)} ج.م</TableCell>
-                <TableCell className="text-left font-bold">{(item.quantity * item.unitPrice).toFixed(2)} ج.م</TableCell>
+                <TableCell className="text-destructive">
+                  {Number(item.discount ?? 0) > 0 ? `-${Number(item.discount).toFixed(2)} ج.م` : "—"}
+                </TableCell>
+                <TableCell className="text-left font-bold">{lineTotal(item).toFixed(2)} ج.م</TableCell>
                 <TableCell className={`text-left font-bold text-sm ${cost > 0 ? (itemProfit >= 0 ? "text-green-700" : "text-red-600") : "text-muted-foreground"}`}>
                   {cost > 0 ? `${itemProfit.toFixed(2)} ج.م` : <span className="text-xs">—</span>}
                 </TableCell>

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, invoiceSettingsTable, invoiceReturnsTable, invoiceReturnItemsTable, accountTransactionsTable } from "@workspace/db";
+import { db, invoicesTable, invoiceItemsTable, customersTable, productsTable, invoiceSettingsTable, invoiceReturnsTable, invoiceReturnItemsTable, accountTransactionsTable, usersTable } from "@workspace/db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { nextDocumentNumber } from "../lib/document-number";
 
@@ -118,10 +118,16 @@ router.post("/invoices", async (req, res) => {
   if (paymentMethod === "credit" && !customerId) return res.status(400).json({ error: "customerId is required for credit sales" });
 
   const invoiceNumber = await generateInvoiceNumber();
+
+  // كان الاستعلام هنا يُنفَّذ ونتيجته تُهمَل، فيبقى `created_by` فارغًا دائمًا.
   const userId = (req.session as any)?.userId;
-  let createdBy = null;
+  let createdBy: string | null = null;
   if (userId) {
-    const users = await db.select({ name: sql<string>`name` }).from(sql`users`).where(eq(sql`id`, userId)).limit(1);
+    const [user] = await db
+      .select({ name: usersTable.name })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    createdBy = user?.name ?? null;
   }
 
   let subtotal = 0;
