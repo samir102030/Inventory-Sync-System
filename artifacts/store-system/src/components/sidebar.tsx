@@ -100,14 +100,20 @@ const crmItems = [
   { title: "رسائل واتساب", url: "/whatsapp", icon: MessageCircle },
 ];
 
-const ownerItems = [
+/**
+ * إدارة النظام: ما يخص النظام نفسه لا عمل الشركة اليومي.
+ *
+ * الشركات لمالك النظام وحده. الطلبات يراها الأدمن أيضًا لأن موظفيه يسجّلون
+ * بأنفسهم وموافقتهم عليه هو — والشريط الجانبي يخفي عن كلٍّ ما لا يفتحه.
+ */
+const systemItems = [
+  { title: "طلبات التسجيل", url: "/requests", icon: Inbox },
   { title: "الشركات", url: "/companies", icon: Building2 },
 ];
 
 const otherItems = [
   { title: "الرخص", url: "/licenses", icon: Key },
   { title: "التقارير", url: "/reports", icon: BarChart },
-  { title: "طلبات التسجيل", url: "/requests", icon: Inbox },
   { title: "الإعدادات", url: "/settings", icon: Settings },
 ];
 
@@ -171,7 +177,7 @@ export function AppSidebar() {
         <NavGroup label="المالية" items={visibleFinanceItems} location={location} />
         <NavGroup label="المخزون" items={allowed(inventoryItems)} location={location} />
         <NavGroup label="أخرى" items={allowed(otherItems)} location={location} />
-        <NavGroup label="إدارة النظام" items={allowed(ownerItems)} location={location} />
+        <NavGroup label="إدارة النظام" items={allowed(systemItems)} location={location} />
       </SidebarContent>
       <SidebarFooter className="border-t p-4">
         {/* الشركة الفعّالة أسفل القائمة تمامًا، بجوار اسم المستخدم وزر الخروج. */}

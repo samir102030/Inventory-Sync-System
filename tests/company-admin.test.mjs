@@ -152,6 +152,33 @@ export default async function run() {
   check("لا يرى منتجات ألفا", !(await his("GET", "/products")).data?.some?.((p) => p.name?.includes("ألفا")));
   check("ولا عملاءها", !(await his("GET", "/customers")).data?.some?.((c) => c.name?.includes("ألفا")));
 
+  section("٣٣) إنشاء حساب من جوه شركة");
+
+  // المالك واقف داخل شركة: الحساب الذي ينشئه يخصّها بلا اختيار من قائمة.
+  await owner("POST", `/companies/${alpha.id}/switch`);
+
+  const inside = await owner("POST", "/users", {
+    username: "inside_alpha",
+    password: "Inside!2345",
+    name: "موظف من جوه ألفا",
+    role: "cashier",
+  });
+  check("الإنشاء بلا تحديد شركة ينجح", inside.status === 201, `${inside.status} ${JSON.stringify(inside.data)}`);
+  check("والحساب راح لألفا", (await a("GET", "/users")).data?.some((u) => u.username === "inside_alpha"));
+  check(
+    "ولا يظهر لبيتا",
+    !(await api(await login("admin_b"))("GET", "/users")).data?.some((u) => u.username === "inside_alpha"),
+  );
+
+  await owner("POST", "/companies/switch/clear");
+  const outside = await owner("POST", "/users", {
+    username: "no_company",
+    password: "Nope!12345",
+    name: "بلا شركة",
+    role: "cashier",
+  });
+  check("وبلا شركة مختارة يُرفض بوضوح", outside.status === 400 && outside.data?.code === "COMPANY_REQUIRED", `${outside.status}`);
+
   section("٣٢) صندوق الطلبات محصور لأدمن الشركة");
 
   const adminInbox = await a("GET", "/users/requests");

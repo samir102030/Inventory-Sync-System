@@ -24,6 +24,17 @@ function requestedCompanyId(req: any): number | null | undefined {
 }
 
 /**
+ * الشركة التي يعمل داخلها المالك الآن.
+ *
+ * وهو مبدَّل إلى شركة فهو يتصرف كأدمنها: حساب ينشئه يخصّها، فلا معنى لأن
+ * يُطلب منه اختيارها من قائمة وهو واقف بداخلها.
+ */
+function activeCompanyId(req: any): number | null {
+  const session = req.session as any;
+  return session?.role === "owner" ? (session.activeCompanyId ?? null) : null;
+}
+
+/**
  * لا يمنح دور `owner` إلا مالك نظام. بدون هذا الفحص يستطيع أي أدمن شركة
  * أن ينشئ لنفسه حساب مالك ويرى بيانات الشركات كلها.
  */
@@ -85,10 +96,10 @@ router.post("/users", async (req, res) => {
   }
   if (rejectOwnerEscalation(req, res, role)) return;
 
-  const companyId = requestedCompanyId(req);
+  const companyId = requestedCompanyId(req) ?? activeCompanyId(req) ?? undefined;
   if ((req.session as any)?.role === "owner" && role !== "owner" && !companyId) {
     return res.status(400).json({
-      error: "اختر الشركة التي ينتمي إليها المستخدم.",
+      error: "اختر شركة أولًا — من القائمة، أو بدّل إلى الشركة من الزر أسفل الشريط الجانبي.",
       code: "COMPANY_REQUIRED",
     });
   }

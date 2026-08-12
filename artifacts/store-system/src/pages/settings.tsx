@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Check, X, Upload, Trash, Download, AlertTriangle, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRole } from "@/hooks/use-role";
+import { activeCompanyOf, useSession } from "@/hooks/use-session";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "مالك النظام",
@@ -41,6 +42,8 @@ const companyOf = (user: User) => (user as UserWithCompany).companyName ?? null;
 
 function UsersManagement() {
   const { isOwner } = useRole();
+  const { data: session } = useSession();
+  const activeCompany = activeCompanyOf(session);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({ username: "", password: "", name: "", role: "cashier" as UserInputRole, phone: "", companyId: "" });
@@ -76,7 +79,15 @@ function UsersManagement() {
       });
     } else {
       setEditingUser(null);
-      setFormData({ username: "", password: "", name: "", role: "cashier", phone: "", companyId: "" });
+      setFormData({
+        username: "",
+        password: "",
+        name: "",
+        role: "cashier",
+        phone: "",
+        // مبدَّل جوه شركة؟ الحساب الجديد يخصّها — بلا اختيار من قائمة.
+        companyId: String(activeCompany?.id ?? ""),
+      });
     }
     setIsDialogOpen(true);
   };
