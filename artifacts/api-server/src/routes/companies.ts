@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, companiesTable, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { ensureJoinCode } from "./signup";
 
 /**
  * إدارة الشركات — لمالك النظام وحده.
@@ -29,6 +30,8 @@ router.get("/companies", async (_req, res) => {
       taxNumber: companiesTable.taxNumber,
       subscriptionEndsAt: companiesTable.subscriptionEndsAt,
       notes: companiesTable.notes,
+      /** يُملى على الموظف الجديد ليصل طلب تسجيله إلى أدمن هذه الشركة. */
+      joinCode: companiesTable.joinCode,
       isActive: companiesTable.isActive,
       createdAt: companiesTable.createdAt,
       userCount: sql<number>`(
@@ -71,7 +74,10 @@ router.post("/companies", async (req, res) => {
     })
     .returning();
 
-  return res.status(201).json(company);
+  // كل شركة تحتاج كود انضمام من لحظة إنشائها ليسجّل موظفوها بأنفسهم.
+  const joinCode = await ensureJoinCode(company.id);
+
+  return res.status(201).json({ ...company, joinCode });
 });
 
 router.patch("/companies/:id", async (req, res) => {

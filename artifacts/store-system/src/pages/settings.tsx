@@ -31,25 +31,44 @@ const ROLE_LABEL: Record<string, string> = {
 };
 import type { User, UserInputRole } from "@workspace/api-client-react/src/generated/api.schemas";
 
+/** ما يعيده الخادم بعد الموافقة — يُعرض للأدمن ليسلّم الكود يدويًا لو تعثّر البريد. */
+type ApprovalResult = {
+  activationCode: string;
+  emailSent: boolean;
+  emailError: string | null;
+};
+
 function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
-  const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [roleById, setRoleById] = useState<Record<number, UserInputRole>>({});
+  const [approved, setApproved] = useState<Record<number, ApprovalResult>>({});
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  if (pendingUsers.length === 0) return null;
+  if (pendingUsers.length === 0 && Object.keys(approved).length === 0) return null;
 
-  const handleApprove = (user: User) => {
-    updateUser.mutate(
-      { id: user.id, data: { status: "active", role: roleById[user.id] || "cashier" } },
-      {
-        onSuccess: () => {
-          toast({ title: "تم قبول المستخدم" });
-          queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
-        },
-      }
-    );
+  const handleApprove = async (user: User) => {
+    setBusyId(user.id);
+    try {
+      const result: ApprovalResult = await fetch(`/api/users/${user.id}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ role: roleById[user.id] || "cashier" }),
+      }).then(jsonOrThrow);
+
+      setApproved((prev) => ({ ...prev, [user.id]: result }));
+      queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
+      toast({
+        title: result.emailSent ? "تم القبول وأُرسل الكود بالبريد" : "تم القبول",
+        description: result.emailSent ? undefined : "تعذر إرسال البريد — سلّم الكود بنفسك.",
+      });
+    } catch (error: any) {
+      toast({ title: "تعذر قبول الطلب", description: error.message, variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const handleReject = (user: User) => {
@@ -69,15 +88,30 @@ function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>طلبات تسجيل بحساب جوجل</CardTitle>
-        <CardDescription>بانتظار موافقتك قبل تفعيل الوصول للنظام</CardDescription>
+        <CardTitle>طلبات تسجيل جديدة</CardTitle>
+        <CardDescription>بانتظار موافقتك. عند القبول يُرسَل كود تفعيل على بريد صاحب الطلب.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {Object.entries(approved).map(([id, result]) => (
+          <div key={id} className="rounded-md border border-emerald-600/40 bg-emerald-50 p-3 text-sm dark:bg-emerald-950/30">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>كود التفعيل:</span>
+              <code className="rounded bg-background px-2 py-1 text-base font-bold tracking-[0.3em]">
+                {result.activationCode}
+              </code>
+              <span className="text-muted-foreground">
+                {result.emailSent ? "(أُرسل بالبريد أيضًا)" : `(لم يُرسل: ${result.emailError})`}
+              </span>
+            </div>
+          </div>
+        ))}
+
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>الاسم</TableHead>
               <TableHead>البريد الإلكتروني</TableHead>
+              <TableHead>الشركة</TableHead>
               <TableHead>الصلاحية</TableHead>
               <TableHead className="w-[120px]"></TableHead>
             </TableRow>
@@ -87,6 +121,13 @@ function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell dir="ltr" className="text-right">{user.email}</TableCell>
+                <TableCell>
+                  {companyOf(user) ?? (
+                    <span className="text-amber-600">
+                      شركة جديدة: {(user as UserWithCompany).requestedCompanyName ?? "—"}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Select
                     value={roleById[user.id] || "cashier"}
@@ -101,7 +142,13 @@ function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleApprove(user)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-green-600"
+                      disabled={busyId === user.id}
+                      onClick={() => handleApprove(user)}
+                    >
                       <Check className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleReject(user)}>

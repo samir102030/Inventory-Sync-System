@@ -45,7 +45,18 @@ router.post("/auth/login", async (req, res) => {
   }
 
   try {
-    const users = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
+    /**
+     * الحقل الواحد يقبل البريد أو اسم الدخول.
+     *
+     * الحسابات المسجَّلة ذاتيًا تعرف بريدها ولا تعرف اسم دخولها (يُشتق آليًا)،
+     * والحسابات القديمة تعرف اسمها ولا بريد لها. حقل واحد يخدم الاثنين دون
+     * أن نطلب من أحد تذكّر شيء جديد.
+     */
+    const identifier = String(username).trim();
+    const column = identifier.includes("@") ? usersTable.email : usersTable.username;
+    const value = identifier.includes("@") ? identifier.toLowerCase() : identifier;
+
+    const users = await db.select().from(usersTable).where(eq(column, value)).limit(1);
     const user = users[0];
 
     if (!user || !user.passwordHash) {
@@ -57,8 +68,37 @@ router.post("/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    if (user.status === "pending") {
+      return res.status(403).json({
+        error: "الحساب بانتظار موافقة الأدمن.",
+        code: "PENDING_APPROVAL",
+      });
+    }
+
+    if (user.status === "invited") {
+      return res.status(403).json({
+        error: "حسابك تمت الموافقة عليه. افتح بريدك وأدخل كود التفعيل لاختيار كلمة المرور.",
+        code: "NEEDS_ACTIVATION",
+      });
+    }
+
     if (user.status !== "active") {
-      return res.status(403).json({ error: "الحساب بانتظار موافقة الأدمن" });
+      return res.status(403).json({ error: "هذا الحساب موقوف." });
+    }
+
+    // شركة موقوفة تعني عميلًا توقف عن الدفع: البيانات محفوظة والدخول ممنوع.
+    if (user.companyId) {
+      const [company] = await db
+        .select({ isActive: companiesTable.isActive })
+        .from(companiesTable)
+        .where(eq(companiesTable.id, user.companyId));
+
+      if (company && !company.isActive) {
+        return res.status(403).json({
+          error: "اشتراك شركتك موقوف. تواصل مع مزوّد النظام.",
+          code: "COMPANY_INACTIVE",
+        });
+      }
     }
 
     (req.session as any).userId = user.id;

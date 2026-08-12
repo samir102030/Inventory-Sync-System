@@ -3,6 +3,7 @@ import { requireAuth, requireRolePermissions } from "../middlewares/require-auth
 import { companyScope } from "../middlewares/company-scope";
 import healthRouter from "./health";
 import authRouter from "./auth";
+import signupRouter from "./signup";
 import usersRouter from "./users";
 import categoriesRouter from "./categories";
 import productsRouter from "./products";
@@ -36,6 +37,8 @@ const router: IRouter = Router();
 // (/auth/me يرجّع 401 بنفسه إن لم توجد جلسة، وهذا ما تعتمد عليه شاشة الدخول.)
 router.use(healthRouter);
 router.use(authRouter);
+// التسجيل الذاتي والتفعيل: يعملان قبل وجود حساب، فلا مصادقة عليهما.
+router.use(signupRouter);
 
 // --- بوابة الحماية ----------------------------------------------------------
 // كل ما يأتي بعد هذين السطرين لا يُفتح إلا بجلسة صالحة.

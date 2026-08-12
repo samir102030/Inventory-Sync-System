@@ -26,6 +26,8 @@ type Company = {
   isActive: boolean;
   createdAt: string;
   userCount: number;
+  /** يكتبه موظف جديد عند التسجيل ليصل طلبه لأدمن هذه الشركة. */
+  joinCode: string | null;
 };
 
 type Form = {
@@ -190,6 +192,7 @@ export default function Companies() {
               <TableHeader>
                 <TableRow>
                   <TableHead>الاسم</TableHead>
+                  <TableHead>كود الانضمام</TableHead>
                   <TableHead>التليفون</TableHead>
                   <TableHead>المستخدمون</TableHead>
                   <TableHead>الاشتراك</TableHead>
@@ -201,6 +204,24 @@ export default function Companies() {
                 {filtered.map((company) => (
                   <TableRow key={company.id} className={company.isActive ? "" : "opacity-60"}>
                     <TableCell className="font-medium">{company.name}</TableCell>
+                    {/* يُملى على الموظف الجديد ليصل طلب تسجيله لأدمن هذه الشركة. */}
+                    <TableCell>
+                      {company.joinCode ? (
+                        <button
+                          type="button"
+                          title="نسخ الكود"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(company.joinCode!);
+                            toast({ title: "تم نسخ كود الانضمام" });
+                          }}
+                          className="rounded bg-muted px-2 py-1 font-mono text-xs tracking-widest hover:bg-accent"
+                        >
+                          {company.joinCode}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell dir="ltr" className="text-right">{company.phone || "—"}</TableCell>
                     <TableCell>{company.userCount}</TableCell>
                     <TableCell><SubscriptionCell value={company.subscriptionEndsAt} /></TableCell>

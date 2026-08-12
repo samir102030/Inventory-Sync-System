@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLogin, useGetMe } from "@workspace/api-client-react";
 import { homePathFor } from "@/lib/permissions";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +62,7 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">اسم المستخدم</Label>
+              <Label htmlFor="username">البريد الإلكتروني أو اسم المستخدم</Label>
               <Input
                 id="username"
                 autoComplete="username"
@@ -95,6 +95,20 @@ export default function Login() {
             </Button>
           </form>
 
+          <div className="mt-6 space-y-1 border-t pt-4 text-center text-sm">
+            <p className="text-muted-foreground">
+              ماعندكش حساب؟{" "}
+              <Link href="/signup" className="font-medium text-primary hover:underline">
+                سجّل حساب جديد
+              </Link>
+            </p>
+            <p className="text-muted-foreground">
+              وصلك كود تفعيل؟{" "}
+              <Link href="/activate" className="font-medium text-primary hover:underline">
+                فعّل حسابك
+              </Link>
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

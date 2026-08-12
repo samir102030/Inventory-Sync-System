@@ -1,7 +1,9 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { companiesTable, db, usersTable } from "@workspace/db";
+import { companiesTable, db, rootDb, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { ensureJoinCode, issueActivationCode } from "./signup";
+import { activationEmail, sendEmail } from "../lib/email";
 
 const router = Router();
 
@@ -50,6 +52,8 @@ function serializeUser(
     loginMethod: user.clerkUserId ? "google" : "password",
     companyId: user.companyId,
     companyName,
+    /** طلب عميل جديد: الشركة لم تُنشأ بعد، وهذا اسمها المطلوب. */
+    requestedCompanyName: user.requestedCompanyName,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -106,6 +110,89 @@ router.post("/users", async (req, res) => {
     })
     .returning();
   return res.status(201).json(serializeUser(user));
+});
+
+/**
+ * الموافقة على طلب تسجيل.
+ *
+ * أدمن الشركة يوافق على موظفيه؛ مالك النظام وحده يوافق على عميل جديد —
+ * وسياسة RLS تفرض ذلك من نفسها: طلب العميل الجديد بلا شركة، فلا يظهر
+ * لأدمن أي شركة أصلًا.
+ *
+ * عند الموافقة على عميل جديد تُنشأ شركته ويصير أدمنها.
+ *
+ * الكود يُرجَع في الرد ليراه الأدمن على الشاشة. هذا مقصود: لو تعثّر البريد
+ * (Brevo، أو بريد خاطئ) لا تتوقف العملية — الأدمن يسلّمه بنفسه.
+ */
+router.post("/users/:id/approve", async (req, res) => {
+  const targetId = Number(req.params.id);
+  const isOwner = (req.session as any)?.role === "owner";
+  const role = req.body?.role === "admin" || req.body?.role === "cashier" ? req.body.role : "cashier";
+
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  if (!target) return res.status(404).json({ error: "الطلب غير موجود." });
+  if (target.status === "active") {
+    return res.status(409).json({ error: "هذا الحساب مفعَّل بالفعل.", code: "ALREADY_ACTIVE" });
+  }
+  if (!target.email) {
+    return res.status(400).json({ error: "الطلب بلا بريد إلكتروني.", code: "NO_EMAIL" });
+  }
+
+  let companyId = target.companyId;
+
+  if (!companyId) {
+    // عميل جديد: لا شركة له بعد. مالك النظام وحده يفتح شركة.
+    if (!isOwner) {
+      return res.status(403).json({
+        error: "الموافقة على عميل جديد لمالك النظام وحده.",
+        code: "OWNER_REQUIRED",
+      });
+    }
+
+    const [company] = await rootDb
+      .insert(companiesTable)
+      .values({ name: target.requestedCompanyName ?? target.name, isActive: true })
+      .returning({ id: companiesTable.id });
+
+    companyId = company.id;
+    await ensureJoinCode(companyId);
+  }
+
+  await rootDb
+    .update(usersTable)
+    .set({ role, companyId, requestedCompanyName: null })
+    .where(eq(usersTable.id, targetId));
+
+  const { code, expiresAt } = await issueActivationCode(targetId);
+
+  const appUrl = process.env.APP_URL ?? `${req.protocol}://${req.get("host")}`;
+  const message = activationEmail(target.name, code, appUrl);
+  const delivery = await sendEmail({
+    to: target.email,
+    toName: target.name,
+    subject: message.subject,
+    html: message.html,
+  });
+
+  return res.json({
+    ok: true,
+    activationCode: code,
+    expiresAt: expiresAt.toISOString(),
+    emailSent: delivery.sent,
+    emailError: delivery.reason ?? null,
+  });
+});
+
+/** رفض طلب: يُحذف الصف بالكامل، فلا يبقى حساب معطّل بلا سبب. */
+router.post("/users/:id/reject", async (req, res) => {
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, Number(req.params.id)));
+  if (!target) return res.status(404).json({ error: "الطلب غير موجود." });
+  if (target.status === "active") {
+    return res.status(409).json({ error: "لا يُرفض حساب مفعَّل. أوقفه بدلًا من ذلك." });
+  }
+
+  await rootDb.delete(usersTable).where(eq(usersTable.id, target.id));
+  return res.json({ ok: true });
 });
 
 router.get("/users/:id", async (req, res) => {

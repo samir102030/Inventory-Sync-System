@@ -21,6 +21,11 @@ export const companiesTable = pgTable("companies", {
   /** تاريخ انتهاء الاشتراك. NULL = بلا نهاية محددة. */
   subscriptionEndsAt: date("subscription_ends_at"),
   notes: text("notes"),
+  /**
+   * كود الانضمام: يكتبه موظف جديد عند التسجيل ليصل طلبه إلى أدمن هذه
+   * الشركة. بلا حروف ملتبسة لأنه يُملى ويُكتب يدويًا.
+   */
+  joinCode: text("join_code"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

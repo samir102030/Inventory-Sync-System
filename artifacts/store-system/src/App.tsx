@@ -10,6 +10,7 @@ import { canOpenPage, homePathFor } from "@/lib/permissions";
 import { useLocation } from "wouter";
 
 import Login from "@/pages/login";
+import Signup, { Activate } from "@/pages/signup";
 import Dashboard from "@/pages/dashboard";
 import POS from "@/pages/pos";
 import Invoices from "@/pages/invoices";
@@ -120,6 +121,9 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      {/* التسجيل والتفعيل يعملان بلا حساب، فهما خارج ProtectedRoute. */}
+      <Route path="/signup" component={Signup} />
+      <Route path="/activate" component={Activate} />
       <Route path="/"><HomeRedirect /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/pos"><ProtectedRoute component={POS} /></Route>
