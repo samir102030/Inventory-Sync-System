@@ -49,7 +49,6 @@ function serializeUser(
     email: user.email,
     phone: user.phone,
     status: user.status,
-    loginMethod: user.clerkUserId ? "google" : "password",
     companyId: user.companyId,
     companyName,
     /** طلب عميل جديد: الشركة لم تُنشأ بعد، وهذا اسمها المطلوب. */

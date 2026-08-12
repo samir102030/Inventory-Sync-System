@@ -282,7 +282,7 @@ function UsersManagement() {
                 <TableHead>الاسم</TableHead>
                 <TableHead>اسم المستخدم</TableHead>
                 <TableHead>رقم الهاتف</TableHead>
-                <TableHead>طريقة الدخول</TableHead>
+                <TableHead>الحالة</TableHead>
                 <TableHead>الشركة</TableHead>
                 <TableHead>الصلاحية</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
@@ -297,9 +297,12 @@ function UsersManagement() {
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.username}</TableCell>
                     <TableCell dir="ltr" className="text-right">{user.phone || "—"}</TableCell>
+                    {/* حلّت محل "طريقة الدخول" — كانت جوجل/كلمة مرور، والدخول
+                        بجوجل أُزيل من النظام. الحالة أهم: حساب وُوفق عليه ولم
+                        يُفعَّل بعد يبدو شغّالًا وهو ليس كذلك. */}
                     <TableCell>
-                      <Badge variant={user.loginMethod === "google" ? "secondary" : "outline"}>
-                        {user.loginMethod === "google" ? "جوجل" : "كلمة مرور"}
+                      <Badge variant={user.status === "active" ? "outline" : "secondary"}>
+                        {user.status === "active" ? "مفعَّل" : "بانتظار التفعيل"}
                       </Badge>
                     </TableCell>
                     <TableCell>

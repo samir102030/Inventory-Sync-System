@@ -1,0 +1,13 @@
+{
+  "name": "inventory-tests",
+  "private": true,
+  "type": "module",
+  "description": "Deliberately outside the pnpm workspace: installed with plain npm so it can never affect the lockfile the deploy builds from.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "pg": "^8.20.0"
+  }
+}

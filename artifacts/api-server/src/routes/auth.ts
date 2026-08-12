@@ -19,7 +19,6 @@ function serializeUser(
     email: user.email,
     phone: user.phone,
     status: user.status,
-    loginMethod: "password",
     companyId: user.companyId,
     /** شركة المستخدم نفسه (فارغة لمالك النظام). */
     company: extra.company ?? null,

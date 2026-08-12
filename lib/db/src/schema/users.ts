@@ -11,7 +11,11 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull().default("cashier"),
   email: text("email").unique(),
   phone: text("phone"),
-  clerkUserId: text("clerk_user_id").unique(),
+  /**
+   * `pending`  بانتظار موافقة أدمن على طلب تسجيل.
+   * `invited`  وُوفق عليه وأُرسل كود التفعيل، ولم يختر كلمة مرور بعد.
+   * `active`   يعمل.
+   */
   status: text("status").notNull().default("active"),
   /**
    * الشركة التي ينتمي إليها المستخدم.
