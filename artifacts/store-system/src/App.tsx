@@ -1,5 +1,6 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -53,7 +54,29 @@ function getErrorStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
+/**
+ * أي عملية حفظ تفشل تقول سببها.
+ *
+ * سبع صفحات كانت تكتب `mutate(..., { onSuccess })` بلا `onError`، فالرفض
+ * يمر بلا أثر: يضغط المستخدم "حفظ" فلا يحدث شيء ولا تظهر رسالة — يبدو
+ * كزرار معطّل. والخادم في هذه الحالات يقول ما ينقص بالضبط ("اختر شركة
+ * أولًا") فلا يصل منه شيء.
+ *
+ * هنا لا في كل صفحة: صفحةٌ تُضاف غدًا تحصل على هذا دون أن يتذكره أحد.
+ * وصفحة تعالج خطأها بنفسها تظل كما هي — `onError` الخاص يسبق هذا.
+ */
+const mutationCache = new MutationCache({
+  onError: (error: any) => {
+    toast({
+      title: "تعذّر الحفظ",
+      description: error?.message ?? "حاول مرة أخرى.",
+      variant: "destructive",
+    });
+  },
+});
+
 const queryClient = new QueryClient({
+  mutationCache,
   defaultOptions: {
     queries: {
       // لا تعيد الجلب تلقائياً لما تتحول للتاب — بيمنع مفاجآت وسط الشغل
