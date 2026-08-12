@@ -3,6 +3,7 @@ import { accountsTable } from "./accounts";
 
 export const jam3iyyatTable = pgTable("jam3iyyat", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   totalMembers: integer("total_members").notNull(),
   amountPerMember: numeric("amount_per_member", { precision: 12, scale: 2 }).notNull(),
@@ -14,6 +15,7 @@ export const jam3iyyatTable = pgTable("jam3iyyat", {
 
 export const jam3iyyaPaymentsTable = pgTable("jam3iyya_payments", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   jam3iyyaId: integer("jam3iyya_id").notNull().references(() => jam3iyyatTable.id),
   month: text("month").notNull(), // e.g. "2024-01"
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),

@@ -3,6 +3,7 @@ import { productsTable } from "./products";
 
 export const warehousesTable = pgTable("warehouses", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   description: text("description"),
   isMain: boolean("is_main").notNull().default(false),
@@ -11,6 +12,7 @@ export const warehousesTable = pgTable("warehouses", {
 
 export const warehouseStockTable = pgTable("warehouse_stock", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   warehouseId: integer("warehouse_id").notNull().references(() => warehousesTable.id),
   productId: integer("product_id").notNull().references(() => productsTable.id),
   quantity: integer("quantity").notNull().default(0),
@@ -18,6 +20,7 @@ export const warehouseStockTable = pgTable("warehouse_stock", {
 
 export const warehouseTransfersTable = pgTable("warehouse_transfers", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   transferNumber: text("transfer_number").notNull(),
   fromWarehouseId: integer("from_warehouse_id").references(() => warehousesTable.id),
   toWarehouseId: integer("to_warehouse_id").references(() => warehousesTable.id),
@@ -27,6 +30,7 @@ export const warehouseTransfersTable = pgTable("warehouse_transfers", {
 
 export const warehouseTransferItemsTable = pgTable("warehouse_transfer_items", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   transferId: integer("transfer_id").notNull().references(() => warehouseTransfersTable.id),
   productId: integer("product_id").notNull().references(() => productsTable.id),
   quantity: integer("quantity").notNull(),

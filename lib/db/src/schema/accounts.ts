@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, numeric, date, boolean } fro
 
 export const accountsTable = pgTable("accounts", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   type: text("type").notNull().default("cash"),
   color: text("color").notNull().default("#3b82f6"),
@@ -13,6 +14,7 @@ export const accountsTable = pgTable("accounts", {
 
 export const accountTransactionsTable = pgTable("account_transactions", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   accountId: integer("account_id").notNull().references(() => accountsTable.id, { onDelete: "cascade" }),
   direction: text("direction").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),

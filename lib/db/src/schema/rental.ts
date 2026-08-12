@@ -3,6 +3,7 @@ import { accountsTable } from "./accounts";
 
 export const rentalPaymentsTable = pgTable("rental_payments", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   propertyName: text("property_name").notNull(),
   tenantName: text("tenant_name").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),

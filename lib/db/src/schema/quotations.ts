@@ -7,6 +7,7 @@ import { projectsTable } from "./projects";
 
 export const quotationsTable = pgTable("quotations", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   quotationNumber: text("quotation_number").notNull().unique(),
   customerId: integer("customer_id").references(() => customersTable.id),
   customerName: text("customer_name"),
@@ -24,6 +25,7 @@ export const quotationsTable = pgTable("quotations", {
 
 export const quotationItemsTable = pgTable("quotation_items", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   quotationId: integer("quotation_id").notNull().references(() => quotationsTable.id, { onDelete: "cascade" }),
   productId: integer("product_id").references(() => productsTable.id),
   productName: text("product_name").notNull(),

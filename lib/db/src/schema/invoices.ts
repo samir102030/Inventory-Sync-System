@@ -8,6 +8,7 @@ import { projectsTable } from "./projects";
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   invoiceNumber: text("invoice_number").notNull().unique(),
   customerId: integer("customer_id").references(() => customersTable.id),
   accountId: integer("account_id").references(() => accountsTable.id),
@@ -26,6 +27,7 @@ export const invoicesTable = pgTable("invoices", {
 
 export const invoiceItemsTable = pgTable("invoice_items", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   invoiceId: integer("invoice_id").notNull().references(() => invoicesTable.id, { onDelete: "cascade" }),
   productId: integer("product_id").notNull().references(() => productsTable.id),
   productName: text("product_name").notNull(),
@@ -39,6 +41,7 @@ export const invoiceItemsTable = pgTable("invoice_items", {
 
 export const invoiceReturnsTable = pgTable("invoice_returns", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   returnNumber: text("return_number").notNull().unique(),
   invoiceId: integer("invoice_id").notNull().references(() => invoicesTable.id),
   reason: text("reason"),
@@ -48,6 +51,7 @@ export const invoiceReturnsTable = pgTable("invoice_returns", {
 
 export const invoiceReturnItemsTable = pgTable("invoice_return_items", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   returnId: integer("return_id").notNull().references(() => invoiceReturnsTable.id, { onDelete: "cascade" }),
   productId: integer("product_id").notNull().references(() => productsTable.id),
   productName: text("product_name").notNull(),

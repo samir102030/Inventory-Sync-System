@@ -1,9 +1,10 @@
-import { pgTable, text, serial, timestamp, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, date, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const licensesTable = pgTable("licenses", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   licenseKey: text("license_key").notNull(),
   vendor: text("vendor"),

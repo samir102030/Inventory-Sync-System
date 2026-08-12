@@ -5,6 +5,7 @@ import { accountsTable } from "./accounts";
 
 export const receiptVouchersTable = pgTable("receipt_vouchers", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   voucherNumber: text("voucher_number").notNull().unique(),
   customerId: integer("customer_id").references(() => customersTable.id),
   customerName: text("customer_name"),
@@ -19,6 +20,7 @@ export const receiptVouchersTable = pgTable("receipt_vouchers", {
 
 export const paymentVouchersTable = pgTable("payment_vouchers", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   voucherNumber: text("voucher_number").notNull().unique(),
   supplierId: integer("supplier_id").references(() => suppliersTable.id),
   paidTo: text("paid_to").notNull(),

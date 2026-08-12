@@ -1,7 +1,8 @@
-import { pgTable, text, serial, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer } from "drizzle-orm/pg-core";
 
 export const suppliersTable = pgTable("suppliers", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   phone: text("phone"),
   whatsapp: text("whatsapp"),

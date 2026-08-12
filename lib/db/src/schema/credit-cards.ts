@@ -3,6 +3,7 @@ import { accountsTable } from "./accounts";
 
 export const creditCardsTable = pgTable("credit_cards", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),           // e.g. "Visa CIB", "MasterCard NBE"
   lastFour: text("last_four"),            // optional last 4 digits
   creditLimit: numeric("credit_limit", { precision: 12, scale: 2 }),
@@ -13,6 +14,7 @@ export const creditCardsTable = pgTable("credit_cards", {
 
 export const creditCardTransactionsTable = pgTable("credit_card_transactions", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   cardId: integer("card_id").notNull().references(() => creditCardsTable.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),

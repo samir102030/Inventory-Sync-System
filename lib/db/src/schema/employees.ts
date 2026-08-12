@@ -5,6 +5,7 @@ import { accountsTable } from "./accounts";
 
 export const employeesTable = pgTable("employees", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   position: text("position").notNull().default(""),
   baseSalary: numeric("base_salary", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -17,6 +18,7 @@ export const employeesTable = pgTable("employees", {
 
 export const salaryPaymentsTable = pgTable("salary_payments", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   employeeId: integer("employee_id").notNull().references(() => employeesTable.id),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   month: text("month").notNull(),

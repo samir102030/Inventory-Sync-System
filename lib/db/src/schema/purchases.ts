@@ -5,6 +5,7 @@ import { accountsTable } from "./accounts";
 
 export const purchasesTable = pgTable("purchases", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   purchaseNumber: text("purchase_number").notNull().unique(),
   supplierId: integer("supplier_id").references(() => suppliersTable.id),
   supplierName: text("supplier_name"),
@@ -21,6 +22,7 @@ export const purchasesTable = pgTable("purchases", {
 
 export const purchaseItemsTable = pgTable("purchase_items", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   purchaseId: integer("purchase_id").notNull().references(() => purchasesTable.id, { onDelete: "cascade" }),
   productId: integer("product_id").notNull().references(() => productsTable.id),
   productName: text("product_name").notNull(),

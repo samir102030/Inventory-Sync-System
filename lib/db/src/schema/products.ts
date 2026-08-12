@@ -5,6 +5,7 @@ import { categoriesTable } from "./categories";
 
 export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   description: text("description"),
   price: numeric("price", { precision: 12, scale: 2 }).notNull(),

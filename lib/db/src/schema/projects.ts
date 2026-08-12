@@ -5,6 +5,7 @@ import { customersTable } from "./customers";
 
 export const projectsTable = pgTable("projects", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   name: text("name").notNull(),
   description: text("description"),
   customerId: integer("customer_id").references(() => customersTable.id),

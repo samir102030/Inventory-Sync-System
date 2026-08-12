@@ -6,6 +6,7 @@ import { projectsTable } from "./projects";
 
 export const expensesTable = pgTable("expenses", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id"),
   description: text("description").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   category: text("category").notNull().default("other"),
