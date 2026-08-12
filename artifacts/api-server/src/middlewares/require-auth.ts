@@ -78,8 +78,18 @@ const CASHIER_NEVER = [
   "/products/tracking",
 ];
 
+/**
+ * الكاشير لا يعتمد فاتورة — ولا فاتورة نفسه.
+ *
+ * `POST /invoices` مسموح له (وهو البيع)، و `/invoices/:id/approve` يقع تحته
+ * بالمطابقة بالبادئة، فلولا هذا الفحص لاعتمد ما ينشئه ولأصبحت المراجعة اسمًا
+ * بلا معنى. التحقق بالنمط لأن الرقم في وسط المسار.
+ */
+const CASHIER_NEVER_PATTERNS = [/^\/invoices\/\d+\/approve$/];
+
 function cashierMayPass(method: string, path: string) {
   if (CASHIER_NEVER.some((p) => matches(path, p))) return false;
+  if (CASHIER_NEVER_PATTERNS.some((pattern) => pattern.test(path))) return false;
 
   if (method === "GET") {
     return (

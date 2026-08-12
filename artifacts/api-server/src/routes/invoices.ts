@@ -22,6 +22,9 @@ function formatInvoice(inv: any, customerName?: string | null, customerWhatsapp?
     isTaxable: Number(inv.isTaxable ?? 0),
     notes: inv.notes ?? null,
     createdBy: inv.createdBy ?? null,
+    approvalStatus: inv.approvalStatus ?? "approved",
+    approvedBy: inv.approvedBy ?? null,
+    approvedAt: inv.approvedAt instanceof Date ? inv.approvedAt.toISOString() : (inv.approvedAt ?? null),
     createdAt: inv.createdAt instanceof Date ? inv.createdAt.toISOString() : inv.createdAt,
   };
 }
@@ -86,6 +89,10 @@ router.get("/invoices", async (req, res) => {
   if (endDate) conditions.push(lte(sql`${invoicesTable.createdAt}::date`, sql`${String(endDate)}::date`));
   if (customerId) conditions.push(eq(invoicesTable.customerId, Number(customerId)));
   if (status) conditions.push(eq(invoicesTable.status, String(status)));
+  // ‏?approval=pending تستخدمه صفحة المراجعة.
+  if (req.query.approval) {
+    conditions.push(eq(invoicesTable.approvalStatus, String(req.query.approval)));
+  }
 
   const rows = await db
     .select({
@@ -102,6 +109,9 @@ router.get("/invoices", async (req, res) => {
       status: invoicesTable.status,
       notes: invoicesTable.notes,
       createdBy: invoicesTable.createdBy,
+      approvalStatus: invoicesTable.approvalStatus,
+      approvedBy: invoicesTable.approvedBy,
+      approvedAt: invoicesTable.approvedAt,
       createdAt: invoicesTable.createdAt,
     })
     .from(invoicesTable)
@@ -162,6 +172,8 @@ router.post("/invoices", async (req, res) => {
     status: status ?? "paid",
     notes,
     createdBy,
+    // فاتورة الكاشير تنتظر مراجعة الأدمن؛ وما ينشئه الأدمن معتمد بحكم من أنشأه.
+    approvalStatus: (req.session as any)?.role === "cashier" ? "pending" : "approved",
   }).returning();
 
   for (const item of resolvedItems) {
@@ -218,6 +230,9 @@ router.get("/invoices/:id", async (req, res) => {
       status: invoicesTable.status,
       notes: invoicesTable.notes,
       createdBy: invoicesTable.createdBy,
+      approvalStatus: invoicesTable.approvalStatus,
+      approvedBy: invoicesTable.approvedBy,
+      approvedAt: invoicesTable.approvedAt,
       createdAt: invoicesTable.createdAt,
     })
     .from(invoicesTable)
@@ -311,6 +326,33 @@ router.patch("/invoices/:id", async (req, res) => {
     customerName = custs[0]?.name ?? null;
   }
   return res.json(formatInvoice(updated, customerName));
+});
+
+/**
+ * اعتماد فاتورة راجعها الأدمن.
+ *
+ * لا شيء يتحرك هنا: المخزون والخزينة تحرّكا لحظة البيع. هذه علامة تدقيق —
+ * "رأيتها ووافقت" — واسم من وافق محفوظ معها.
+ *
+ * ممنوع على الكاشير في `require-auth.ts`؛ بدونه كان `POST /invoices/:id/approve`
+ * يقع تحت سماحه بـ `POST /invoices` فيعتمد فواتير نفسه.
+ */
+router.post("/invoices/:id/approve", async (req, res) => {
+  const userId = (req.session as any)?.userId;
+  let approver: string | null = null;
+  if (userId) {
+    const [user] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, userId));
+    approver = user?.name ?? null;
+  }
+
+  const [updated] = await db
+    .update(invoicesTable)
+    .set({ approvalStatus: "approved", approvedBy: approver, approvedAt: new Date() })
+    .where(eq(invoicesTable.id, Number(req.params.id)))
+    .returning();
+
+  if (!updated) return res.status(404).json({ error: "الفاتورة غير موجودة." });
+  return res.json(formatInvoice(updated));
 });
 
 router.get("/invoices/:id/returns", async (req, res) => {

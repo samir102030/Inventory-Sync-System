@@ -14,6 +14,7 @@ const SUITES = [
   ["signup", () => import("./signup.test.mjs")],
   ["company-admin", () => import("./company-admin.test.mjs")],
   ["quotations", () => import("./quotations.test.mjs")],
+  ["invoice-approval", () => import("./invoice-approval.test.mjs")],
 ];
 
 const only = process.argv[2];

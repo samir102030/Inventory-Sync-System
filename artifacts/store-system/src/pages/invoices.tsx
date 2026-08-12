@@ -734,7 +734,14 @@ export default function Invoices() {
                     <TableCell>{invoice.customerName || 'عميل نقدي'}</TableCell>
                     <TableCell className="font-bold">{invoice.total.toFixed(2)} ج.م</TableCell>
                     <TableCell>{getPaymentLabel(invoice.paymentMethod || '')}</TableCell>
-                    <TableCell><StatusBadge status={invoice.status} /></TableCell>
+                    <TableCell className="flex items-center gap-1">
+                      <StatusBadge status={invoice.status} />
+                      {/* فاتورة كاشير لم يعتمدها الأدمن بعد. يراها كلاهما:
+                          الكاشير ليعرف أنها تحت المراجعة، والأدمن ليراجعها. */}
+                      {(invoice as any).approvalStatus === "pending" && (
+                        <Badge className="bg-amber-500 hover:bg-amber-500">بانتظار الاعتماد</Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={(e) => { e.stopPropagation(); openInvoice(invoice.id); }}>
                         <Eye className="h-4 w-4" />

@@ -29,6 +29,7 @@ import {
   Wallet,
   Building,
   Inbox,
+  ClipboardCheck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -61,6 +62,8 @@ const salesItems = [
   { title: "الرئيسية", url: "/dashboard", icon: Home },
   { title: "نقطة البيع", url: "/pos", icon: ShoppingCart },
   { title: "الفواتير", url: "/invoices", icon: FileText },
+  // مخفية عن الكاشير: هو من يُراجَع، لا من يراجِع.
+  { title: "فواتير بانتظار الاعتماد", url: "/invoice-approvals", icon: ClipboardCheck },
   { title: "عروض الأسعار", url: "/quotations", icon: ClipboardList },
   { title: "المشاريع", url: "/projects", icon: FolderOpen },
 ];

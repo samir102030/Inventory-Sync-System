@@ -19,6 +19,15 @@ export const invoicesTable = pgTable("invoices", {
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   paymentMethod: text("payment_method").notNull().default("cash"),
   status: text("status").notNull().default("paid"),
+  /**
+   * مراجعة الأدمن لفواتير الكاشير: `pending` ثم `approved`.
+   *
+   * منفصل عن `status` عمدًا — ذاك حالة الدفع، وهذا حالة التدقيق، ولا يصح
+   * أن تُخفي إحداهما الأخرى.
+   */
+  approvalStatus: text("approval_status").notNull().default("approved"),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
   isTaxable: integer("is_taxable").notNull().default(0),
   notes: text("notes"),
   createdBy: text("created_by"),
