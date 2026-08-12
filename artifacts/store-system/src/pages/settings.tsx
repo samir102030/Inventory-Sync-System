@@ -21,6 +21,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Check, X, Upload, Trash, Download, AlertTriangle, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useRole } from "@/hooks/use-role";
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "مالك النظام",
+  admin: "مدير النظام",
+  cashier: "كاشير",
+};
 import type { User, UserInputRole } from "@workspace/api-client-react/src/generated/api.schemas";
 
 function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
@@ -111,6 +118,7 @@ function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
 }
 
 function UsersManagement() {
+  const { isOwner } = useRole();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({ username: "", password: "", name: "", role: "cashier" as UserInputRole, phone: "" });
@@ -221,7 +229,7 @@ function UsersManagement() {
                         {user.loginMethod === "google" ? "جوجل" : "كلمة مرور"}
                       </Badge>
                     </TableCell>
-                    <TableCell>{user.role === 'admin' ? 'مدير النظام' : 'كاشير'}</TableCell>
+                    <TableCell>{ROLE_LABEL[user.role] ?? user.role}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(user)}>
@@ -266,6 +274,7 @@ function UsersManagement() {
                 <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v as UserInputRole})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    {isOwner && <SelectItem value="owner">مالك النظام</SelectItem>}
                     <SelectItem value="admin">مدير النظام</SelectItem>
                     <SelectItem value="cashier">كاشير</SelectItem>
                   </SelectContent>
@@ -284,6 +293,7 @@ function UsersManagement() {
 }
 
 export default function Settings() {
+  const { isAdmin, isOwner } = useRole();
   const { data: settings, isLoading: settingsLoading } = useGetInvoiceSettings();
   const updateSettings = useUpdateInvoiceSettings();
   const { data: user } = useGetMe();
@@ -438,8 +448,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {user?.role === 'admin' && <UsersManagement />}
-      {user?.role === 'admin' && <BackupResetSection />}
+      {isAdmin && <UsersManagement />}
+      {isAdmin && <BackupResetSection />}
     </div>
   );
 }

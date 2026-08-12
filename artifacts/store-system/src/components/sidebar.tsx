@@ -48,6 +48,7 @@ import { canOpenPage } from "@/lib/permissions";
 import { Button } from "./ui/button";
 
 const ROLE_LABELS: Record<string, string> = {
+  owner: "مالك النظام",
   admin: "مدير النظام",
   cashier: "كاشير",
   accountant: "محاسب",

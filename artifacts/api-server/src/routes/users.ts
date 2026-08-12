@@ -61,6 +61,38 @@ router.get("/users/:id", async (req, res) => {
 router.patch("/users/:id", async (req, res) => {
   const { username, password, name, role, phone, status } = req.body;
   if (rejectOwnerEscalation(req, res, role)) return;
+
+  const targetId = Number(req.params.id);
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  if (!target) return res.status(404).json({ error: "Not found" });
+
+  /**
+   * لا يُنزَّل مالك النظام إلا بيد مالك.
+   *
+   * بدون هذا الفحص كان أي حفظ من شاشة إدارة المستخدمين يعيد دور المالك إلى
+   * `admin`، لأن قائمة الأدوار في الواجهة لا تحتوي "مالك" أصلًا فترسل القيمة
+   * الافتراضية. حدث هذا فعلًا وأفقد المالك صلاحياته دون أن يلمس أحد الدور.
+   */
+  if (target.role === "owner" && role && role !== "owner") {
+    if ((req.session as any)?.role !== "owner") {
+      return res.status(403).json({
+        error: "لا يمكن تغيير دور مالك النظام.",
+        code: "OWNER_ROLE_PROTECTED",
+      });
+    }
+  }
+
+  /** حماية إضافية: لا يُحذف/يُعطَّل آخر مالك في النظام. */
+  if (target.role === "owner" && status && status !== "active") {
+    const owners = await db.select().from(usersTable).where(eq(usersTable.role, "owner"));
+    if (owners.length <= 1) {
+      return res.status(409).json({
+        error: "لا يمكن إيقاف المالك الوحيد للنظام.",
+        code: "LAST_OWNER",
+      });
+    }
+  }
+
   const updates: Record<string, any> = {};
   if (username) updates.username = username;
   if (name) updates.name = name;
@@ -74,7 +106,27 @@ router.patch("/users/:id", async (req, res) => {
 });
 
 router.delete("/users/:id", async (req, res) => {
-  await db.delete(usersTable).where(eq(usersTable.id, Number(req.params.id)));
+  const targetId = Number(req.params.id);
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  if (!target) return res.json({ ok: true });
+
+  if (target.role === "owner") {
+    if ((req.session as any)?.role !== "owner") {
+      return res.status(403).json({
+        error: "لا يمكن حذف مالك النظام.",
+        code: "OWNER_PROTECTED",
+      });
+    }
+    const owners = await db.select().from(usersTable).where(eq(usersTable.role, "owner"));
+    if (owners.length <= 1) {
+      return res.status(409).json({
+        error: "لا يمكن حذف المالك الوحيد للنظام.",
+        code: "LAST_OWNER",
+      });
+    }
+  }
+
+  await db.delete(usersTable).where(eq(usersTable.id, targetId));
   return res.json({ ok: true });
 });
 
