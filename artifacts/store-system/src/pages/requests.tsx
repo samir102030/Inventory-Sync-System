@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, Inbox, X } from "lucide-react";
+import { Building2, Check, Inbox, UserPlus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { jsonOrThrow } from "@/lib/http";
 
@@ -25,6 +25,7 @@ type Request = {
   email: string | null;
   phone: string | null;
   status: string;
+  role?: string;
   companyName: string | null;
   requestedCompanyName: string | null;
   createdAt: string;
@@ -39,6 +40,50 @@ type Approved = {
   emailError: string | null;
 };
 
+/** زرّا القبول والرفض — واحد لكلا النوعين، والفرق في نص التأكيد والصلاحية. */
+function RequestActions({
+  user,
+  role,
+  approve,
+  reject,
+  confirmText,
+}: {
+  user: Request;
+  role: string;
+  approve: { mutate: (v: { user: Request; role: string }) => void; isPending: boolean };
+  reject: { mutate: (v: Request) => void; isPending: boolean };
+  confirmText: string;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-green-600"
+        disabled={approve.isPending}
+        title="قبول"
+        onClick={() => {
+          if (confirm(confirmText)) approve.mutate({ user, role });
+        }}
+      >
+        <Check className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-destructive"
+        disabled={reject.isPending}
+        title="رفض"
+        onClick={() => {
+          if (confirm(`رفض طلب ${user.name}؟ الطلب هيتشال نهائيًا.`)) reject.mutate(user);
+        }}
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 export default function Requests() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -52,18 +97,31 @@ export default function Requests() {
     queryFn: () => fetch("/api/users/requests", { credentials: "include" }).then(jsonOrThrow),
   });
 
+  /**
+   * نوعا الطلب مختلفان في القرار لا في الشكل فقط.
+   *
+   * طلب شركة جديدة يعني فتح عميل جديد على النظام — قبوله يُنشئ شركة ويجعل
+   * صاحبها مديرها، ولا يفعله إلا مالك النظام.
+   *
+   * طلب انضمام يعني موظفًا في شركة قائمة — قبوله يضيفه إليها بصلاحية تختارها،
+   * ويفعله أدمن تلك الشركة.
+   *
+   * الفارق: هل الطلب مرتبط بشركة أصلًا؟
+   */
   const pending = users.filter((u) => u.status === "pending");
+  const newCompanies = pending.filter((u) => !u.companyName);
+  const joiners = pending.filter((u) => Boolean(u.companyName));
   const awaiting = users.filter((u) => u.status === "invited");
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["users"] });
 
   const approve = useMutation({
-    mutationFn: (user: Request) =>
+    mutationFn: ({ user, role }: { user: Request; role: string }) =>
       fetch(`/api/users/${user.id}/approve`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ role: roleById[user.id] ?? "cashier" }),
+        body: JSON.stringify({ role }),
       })
         .then(jsonOrThrow)
         .then((result) => ({ user, result })),
@@ -125,42 +183,100 @@ export default function Requests() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Inbox className="h-5 w-5" />
-            بانتظار الموافقة
-            {pending.length > 0 && <Badge>{pending.length}</Badge>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>الاسم</TableHead>
-                <TableHead>البريد الإلكتروني</TableHead>
-                <TableHead>الهاتف</TableHead>
-                <TableHead>الشركة</TableHead>
-                <TableHead>الصلاحية</TableHead>
-                <TableHead className="w-[120px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="h-24 text-center">جاري التحميل...</TableCell></TableRow>
-              ) : pending.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">مفيش طلبات جديدة.</TableCell></TableRow>
-              ) : (
-                pending.map((user) => (
+      {isLoading && <p className="text-sm text-muted-foreground">جاري التحميل...</p>}
+
+      {!isLoading && pending.length === 0 && (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+            <Inbox className="h-8 w-8" />
+            <p>مفيش طلبات جديدة.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* عملاء جدد: القبول يفتح شركة على النظام. */}
+      {newCompanies.length > 0 && (
+        <Card className="border-amber-500/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-amber-600" />
+              شركات جديدة
+              <Badge className="bg-amber-500 hover:bg-amber-500">{newCompanies.length}</Badge>
+            </CardTitle>
+            <CardDescription>
+              عملاء جدد عايزين النظام. القبول هيفتح لكل واحد شركة جديدة ويخليه مديرها.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>اسم الشركة المطلوبة</TableHead>
+                  <TableHead>مقدّم الطلب</TableHead>
+                  <TableHead>البريد الإلكتروني</TableHead>
+                  <TableHead>الهاتف</TableHead>
+                  <TableHead className="w-[120px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {newCompanies.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-bold text-amber-700 dark:text-amber-500">
+                      {user.requestedCompanyName ?? "—"}
+                    </TableCell>
+                    <TableCell>{user.name}</TableCell>
+                    <TableCell dir="ltr" className="text-right">{user.email ?? "—"}</TableCell>
+                    <TableCell dir="ltr" className="text-right">{user.phone ?? "—"}</TableCell>
+                    <TableCell>
+                      <RequestActions
+                        user={user}
+                        // صاحب الشركة الجديدة هو مديرها بطبيعة الحال.
+                        role="admin"
+                        approve={approve}
+                        reject={reject}
+                        confirmText={`قبول "${user.requestedCompanyName}"؟ هتتعمل شركة جديدة و${user.name} يبقى مديرها.`}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* موظفون في شركة قائمة: القبول يضيفهم إليها بصلاحية تختارها. */}
+      {joiners.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              انضمام لشركة قائمة
+              <Badge>{joiners.length}</Badge>
+            </CardTitle>
+            <CardDescription>
+              موظفون سجّلوا بكود شركتهم. حدّد صلاحية كل واحد قبل القبول.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>الاسم</TableHead>
+                  <TableHead>البريد الإلكتروني</TableHead>
+                  <TableHead>الهاتف</TableHead>
+                  <TableHead>الشركة</TableHead>
+                  <TableHead>الصلاحية</TableHead>
+                  <TableHead className="w-[120px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {joiners.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell dir="ltr" className="text-right">{user.email ?? "—"}</TableCell>
                     <TableCell dir="ltr" className="text-right">{user.phone ?? "—"}</TableCell>
-                    <TableCell>
-                      {user.companyName ?? (
-                        <span className="text-amber-600">شركة جديدة: {user.requestedCompanyName ?? "—"}</span>
-                      )}
-                    </TableCell>
+                    <TableCell>{user.companyName}</TableCell>
                     <TableCell>
                       <Select
                         value={roleById[user.id] ?? "cashier"}
@@ -174,38 +290,21 @@ export default function Requests() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-green-600"
-                          disabled={approve.isPending}
-                          onClick={() => approve.mutate(user)}
-                          title="قبول"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          disabled={reject.isPending}
-                          onClick={() => {
-                            if (confirm(`رفض طلب ${user.name}؟ الطلب هيتشال نهائيًا.`)) reject.mutate(user);
-                          }}
-                          title="رفض"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <RequestActions
+                        user={user}
+                        role={roleById[user.id] ?? "cashier"}
+                        approve={approve}
+                        reject={reject}
+                        confirmText={`قبول ${user.name} في ${user.companyName}؟`}
+                      />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* حساب وُوفق عليه ولم يُفعَّل بعد يبدو موجودًا وهو لا يعمل — فيُعرض
           صراحةً بدل أن يختفي بين المستخدمين. */}
@@ -228,7 +327,8 @@ export default function Requests() {
                         variant="outline"
                         size="sm"
                         disabled={approve.isPending}
-                        onClick={() => approve.mutate(user)}
+                        // إعادة الإصدار لا تغيّر الصلاحية المعطاة سابقًا.
+                        onClick={() => approve.mutate({ user, role: user.role ?? "cashier" })}
                       >
                         كود جديد
                       </Button>
