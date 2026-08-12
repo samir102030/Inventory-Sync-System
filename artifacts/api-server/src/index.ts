@@ -16,8 +16,13 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// لا يُفتح المنفذ قبل إثبات أن عزل الشركات مفروض من قاعدة البيانات.
-await verifyCompanyIsolation();
+// فحص تشخيصي: يكتب في السجلات إن كان عزل الشركات مفروضًا فعلًا.
+// لا يمنع الإقلاع — عطلٌ في أداة التشخيص نفسها يجب ألا يُسقط الخدمة.
+try {
+  await verifyCompanyIsolation();
+} catch (err) {
+  logger.error({ err }, "Company isolation check could not run");
+}
 
 app.listen(port, (err) => {
   if (err) {
