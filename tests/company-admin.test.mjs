@@ -110,4 +110,54 @@ export default async function run() {
   check("ظهر لأدمن ألفا", Boolean(target));
   check("والرفض يشيله", (await a("POST", `/users/${target.id}/reject`)).status === 200);
   check("فعلًا", !(await a("GET", "/users")).data.some((u) => u.email === "reject.me@test.local"));
+
+  section("٣١) صندوق الطلبات لا يتأثر بتبديل الشركة");
+
+  // طلب العميل الجديد بلا شركة، فكان يختفي لحظة تبديل المالك إلى أي شركة
+  // وتردّ الموافقة بـ "الطلب غير موجود". الموافقة دور مالكٍ لا دور شخص داخل
+  // شركة، فصندوق الطلبات يتجاوز التبديل.
+  await call("POST", "/auth/signup", {
+    name: "عميل مبدَّل",
+    email: "switched@test.local",
+    companyName: "شركة السويتش",
+  });
+
+  await owner("POST", `/companies/${alpha.id}/switch`);
+
+  const inbox = await owner("GET", "/users/requests");
+  check("المالك المبدَّل يرى طلب العميل الجديد", inbox.data?.some((u) => u.email === "switched@test.local"), JSON.stringify(inbox.data?.map((u) => u.email)));
+
+  const switched = inbox.data.find((u) => u.email === "switched@test.local");
+  const approvedWhileSwitched = await owner("POST", `/users/${switched.id}/approve`, { role: "admin" });
+  check("ويقدر يوافق عليه", approvedWhileSwitched.status === 200, `${approvedWhileSwitched.status} ${JSON.stringify(approvedWhileSwitched.data)}`);
+
+  await owner("POST", "/companies/switch/clear");
+  check(
+    "والشركة المطلوبة اتعملت",
+    (await owner("GET", "/companies")).data.some((c) => c.name === "شركة السويتش"),
+  );
+
+  await call("POST", "/auth/activate", {
+    email: "switched@test.local",
+    code: approvedWhileSwitched.data.activationCode,
+    password: "Switch!2345",
+  });
+  const hisSession = await call("POST", "/auth/login", {
+    username: "switched@test.local",
+    password: "Switch!2345",
+  });
+  check("ويدخل على شركته هو", hisSession.data?.user?.company?.name === "شركة السويتش", JSON.stringify(hisSession.data?.user?.company));
+
+  const his = api(hisSession.cookie);
+  check("لا يرى منتجات ألفا", !(await his("GET", "/products")).data?.some?.((p) => p.name?.includes("ألفا")));
+  check("ولا عملاءها", !(await his("GET", "/customers")).data?.some?.((c) => c.name?.includes("ألفا")));
+
+  section("٣٢) صندوق الطلبات محصور لأدمن الشركة");
+
+  const adminInbox = await a("GET", "/users/requests");
+  check(
+    "أدمن ألفا لا يرى طلبات بلا شركة",
+    !adminInbox.data?.some((u) => u.email === "switched@test.local"),
+    JSON.stringify(adminInbox.data?.map((u) => u.email)),
+  );
 }

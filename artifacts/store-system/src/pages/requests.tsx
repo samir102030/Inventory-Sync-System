@@ -45,9 +45,11 @@ export default function Requests() {
   const [roleById, setRoleById] = useState<Record<number, string>>({});
   const [approved, setApproved] = useState<Approved[]>([]);
 
+  // مسار خاص لا `/users`: المالك يرى كل الطلبات هنا مهما كانت الشركة التي
+  // بدّل إليها، لأن الموافقة دور مالكٍ لا دور شخص داخل شركة.
   const { data: users = [], isLoading } = useQuery<Request[]>({
     queryKey: ["users", "requests"],
-    queryFn: () => fetch("/api/users", { credentials: "include" }).then(jsonOrThrow),
+    queryFn: () => fetch("/api/users/requests", { credentials: "include" }).then(jsonOrThrow),
   });
 
   const pending = users.filter((u) => u.status === "pending");

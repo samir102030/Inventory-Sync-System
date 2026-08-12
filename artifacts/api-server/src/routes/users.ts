@@ -112,6 +112,33 @@ router.post("/users", async (req, res) => {
 });
 
 /**
+ * طلبات التسجيل — صندوق وارد على مستوى النظام.
+ *
+ * مالك النظام يرى كل الطلبات مهما كانت الشركة التي بدّل إليها: الموافقة دورُ
+ * مالكٍ لا دور شخص داخل شركة. بدون هذا كان طلب عميل جديد (بلا شركة) يختفي
+ * لحظة تبديله إلى أي شركة، وتردّ الموافقة بـ "الطلب غير موجود".
+ *
+ * أدمن الشركة يرى طلبات شركته وحدها، وسياسة RLS تكفله.
+ */
+function requestReader(req: any) {
+  return (req.session as any)?.role === "owner" ? rootDb : db;
+}
+
+router.get("/users/requests", async (req, res) => {
+  const rows = await requestReader(req)
+    .select()
+    .from(usersTable)
+    .orderBy(usersTable.createdAt);
+
+  const pending = rows.filter((u) => u.status === "pending" || u.status === "invited");
+  const names = await companyNames(pending.map((u) => u.companyId));
+
+  return res.json(
+    pending.map((u) => serializeUser(u, u.companyId ? names.get(u.companyId) ?? null : null)),
+  );
+});
+
+/**
  * الموافقة على طلب تسجيل.
  *
  * أدمن الشركة يوافق على موظفيه؛ مالك النظام وحده يوافق على عميل جديد —
@@ -128,7 +155,11 @@ router.post("/users/:id/approve", async (req, res) => {
   const isOwner = (req.session as any)?.role === "owner";
   const role = req.body?.role === "admin" || req.body?.role === "cashier" ? req.body.role : "cashier";
 
-  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  const [target] = await requestReader(req)
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, targetId));
+
   if (!target) return res.status(404).json({ error: "الطلب غير موجود." });
   if (target.status === "active") {
     return res.status(409).json({ error: "هذا الحساب مفعَّل بالفعل.", code: "ALREADY_ACTIVE" });
@@ -184,7 +215,10 @@ router.post("/users/:id/approve", async (req, res) => {
 
 /** رفض طلب: يُحذف الصف بالكامل، فلا يبقى حساب معطّل بلا سبب. */
 router.post("/users/:id/reject", async (req, res) => {
-  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, Number(req.params.id)));
+  const [target] = await requestReader(req)
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, Number(req.params.id)));
   if (!target) return res.status(404).json({ error: "الطلب غير موجود." });
   if (target.status === "active") {
     return res.status(409).json({ error: "لا يُرفض حساب مفعَّل. أوقفه بدلًا من ذلك." });
