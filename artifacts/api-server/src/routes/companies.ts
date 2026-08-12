@@ -218,17 +218,64 @@ router.post("/companies/switch/clear", (req, res) => {
 });
 
 /**
- * لا حذف للشركات.
+ * حذف شركة — إن كانت فارغة وحدها.
  *
- * حذف شركة يعني حذف بياناتها كلها — فواتير وعملاء وحسابات. الإيقاف
- * (`isActive: false`) يمنع الدخول ويُبقي البيانات، وهو ما يُحتاج فعليًا
- * عند توقف عميل عن الدفع.
+ * الحاجة الحقيقية هي إزالة شركة أُنشئت بالخطأ أو للتجربة، لا التخلص من عميل.
+ * لذلك يُفحص أولًا: إن كان فيها أي بيانات عمل — فاتورة واحدة تكفي — يُرفض
+ * الحذف ويُقال ما فيها بالضبط. عميلٌ توقف عن الدفع يُوقَف لا يُحذف؛ الإيقاف
+ * يمنع الدخول ويُبقي كل شيء.
+ *
+ * ما يُحذف مع الشركة: حسابات مستخدميها وإعدادات فاتورتها. هذه ليست بيانات
+ * عمل، ولا معنى لبقائها بعد شركة لم يعد لها وجود.
  */
-router.delete("/companies/:id", (_req, res) => {
-  return res.status(405).json({
-    error: "لا يمكن حذف شركة. أوقفها بدلًا من ذلك للحفاظ على بياناتها.",
-    code: "USE_DEACTIVATE",
-  });
+
+/** جداول لا يمنع محتواها الحذف: تُنشأ تلقائيًا ولا تحمل عمل أحد. */
+const NOT_BUSINESS_DATA = new Set(["users", "invoice_settings"]);
+
+router.delete("/companies/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  const [company] = await rootDb
+    .select({ id: companiesTable.id, name: companiesTable.name })
+    .from(companiesTable)
+    .where(eq(companiesTable.id, id));
+
+  if (!company) return res.status(404).json({ error: "الشركة غير موجودة." });
+
+  // الجداول تُقرأ من القاعدة لا من قائمة مكتوبة: قائمة تُنسى عند إضافة جدول
+  // جديد، فتُحذف شركة وفيها بيانات.
+  const { rows: tables } = await rootDb.execute<{ table_name: string }>(sql`
+    SELECT table_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = 'company_id'
+    ORDER BY table_name
+  `);
+
+  const counted = tables.map((t) => t.table_name);
+  const countSql = counted
+    .map((t) => `SELECT '${t}' AS name, count(*)::int AS rows FROM "${t}" WHERE company_id = ${id}`)
+    .join(" UNION ALL ");
+
+  const { rows: counts } = await rootDb.execute<{ name: string; rows: number }>(sql.raw(countSql));
+
+  const holding = counts.filter((c) => c.rows > 0 && !NOT_BUSINESS_DATA.has(c.name));
+
+  if (holding.length > 0) {
+    return res.status(409).json({
+      error: `لا يمكن حذف "${company.name}" لأن فيها بيانات. أوقفها بدلًا من ذلك للحفاظ عليها.`,
+      code: "COMPANY_NOT_EMPTY",
+      holding: holding.map((c) => ({ table: c.name, rows: c.rows })),
+    });
+  }
+
+  const userCount = counts.find((c) => c.name === "users")?.rows ?? 0;
+
+  // الأبناء أولًا: الصفوف التلقائية ثم الشركة.
+  for (const table of counted) {
+    await rootDb.execute(sql.raw(`DELETE FROM "${table}" WHERE company_id = ${id}`));
+  }
+  await rootDb.delete(companiesTable).where(eq(companiesTable.id, id));
+
+  return res.json({ ok: true, deletedUsers: userCount });
 });
 
 export default router;

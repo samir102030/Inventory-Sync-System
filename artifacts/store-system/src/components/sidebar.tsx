@@ -28,6 +28,7 @@ import {
   Coins,
   Wallet,
   Building,
+  Inbox,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -106,6 +107,7 @@ const ownerItems = [
 const otherItems = [
   { title: "الرخص", url: "/licenses", icon: Key },
   { title: "التقارير", url: "/reports", icon: BarChart },
+  { title: "طلبات التسجيل", url: "/requests", icon: Inbox },
   { title: "الإعدادات", url: "/settings", icon: Settings },
 ];
 

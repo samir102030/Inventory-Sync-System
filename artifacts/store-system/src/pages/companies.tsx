@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Plus, Pencil, Power, Search } from "lucide-react";
+import { Building2, Plus, Pencil, Power, Search, Trash2 } from "lucide-react";
 
 const BASE = "/api";
 
@@ -126,6 +126,25 @@ export default function Companies() {
     },
     onError: (err: any) => {
       toast({ title: "تعذر الحفظ", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  /**
+   * الحذف للشركة الفاضية وحدها. الخادم يرفض ما فيه بيانات ويقول ما فيه
+   * بالضبط، فنعرضه كما هو بدل رسالة عامة لا تدل على شيء.
+   */
+  const remove = useMutation({
+    mutationFn: (company: Company) =>
+      fetch(`${BASE}/companies/${company.id}`, { method: "DELETE", credentials: "include" }).then(jsonOrThrow),
+    onSuccess: (result: any) => {
+      qc.invalidateQueries({ queryKey: ["companies"] });
+      toast({
+        title: "تم حذف الشركة",
+        description: result?.deletedUsers ? `واتشال معاها ${result.deletedUsers} حساب.` : undefined,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "تعذّر الحذف", description: err?.message, variant: "destructive" });
     },
   });
 
@@ -282,6 +301,19 @@ export default function Companies() {
                           onClick={() => toggleActive.mutate(company)}
                         >
                           <Power className={`h-4 w-4 ${company.isActive ? "text-destructive" : "text-green-600"}`} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="حذف"
+                          disabled={remove.isPending}
+                          onClick={() => {
+                            if (confirm(`حذف "${company.name}" نهائيًا؟\n\nالحذف مسموح للشركة الفاضية بس — لو فيها أي بيانات هيترفض.`)) {
+                              remove.mutate(company);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </TableCell>

@@ -11,6 +11,7 @@ import { useLocation } from "wouter";
 
 import Login from "@/pages/login";
 import Signup, { Activate } from "@/pages/signup";
+import Requests from "@/pages/requests";
 import Dashboard from "@/pages/dashboard";
 import POS from "@/pages/pos";
 import Invoices from "@/pages/invoices";
@@ -140,6 +141,7 @@ function Router() {
       <Route path="/licenses"><ProtectedRoute component={Licenses} /></Route>
       <Route path="/reports"><ProtectedRoute component={Reports} /></Route>
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
+      <Route path="/requests"><ProtectedRoute component={Requests} /></Route>
       <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
       <Route path="/credit-accounts"><ProtectedRoute component={CreditAccounts} /></Route>
       <Route path="/warehouses"><ProtectedRoute component={Warehouses} /></Route>

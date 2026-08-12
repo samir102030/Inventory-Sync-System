@@ -69,4 +69,45 @@ export default async function run() {
   const noAdmin = await owner("POST", "/companies", { name: "شركة زيتا" });
   check("وشركة بلا مدير تُنشأ عادي", noAdmin.status === 201 && noAdmin.data?.admin === null);
   check("ولها كود انضمام", Boolean(noAdmin.data?.joinCode));
+
+  section("٢٩) حذف شركة — الفاضية وحدها");
+
+  // شركة أُنشئت للتجربة ولا شيء فيها: تُحذف.
+  const empty = await owner("DELETE", `/companies/${noAdmin.data.id}`);
+  check("الشركة الفاضية تُحذف", empty.status === 200, `${empty.status} ${JSON.stringify(empty.data)}`);
+  check("واختفت من القائمة", !(await owner("GET", "/companies")).data.some((c) => c.id === noAdmin.data.id));
+
+  // شركة فيها حساب مدير فقط: الحساب ليس بيانات عمل، فتُحذف معه.
+  const withAdminOnly = await owner("DELETE", `/companies/${created.data.id}`);
+  check("شركة بحساب مدير فقط تُحذف", withAdminOnly.status === 200, `${withAdminOnly.status}`);
+  check("ويُقال كم حسابًا اتشال", withAdminOnly.data?.deletedUsers >= 1, JSON.stringify(withAdminOnly.data));
+  check(
+    "ومديرها ما بقاش يقدر يدخل",
+    (await call("POST", "/auth/login", { username: "delta.admin@test.local", password: "Delta!2345" })).status !== 200,
+  );
+
+  // شركة ألفا فيها فواتير ومنتجات: يُرفض حذفها.
+  const companies = (await owner("GET", "/companies")).data;
+  const alpha = companies.find((c) => c.name === "شركة ألفا");
+  const busy = await owner("DELETE", `/companies/${alpha.id}`);
+  check("شركة فيها بيانات لا تُحذف", busy.status === 409, `${busy.status}`);
+  check("والرد يقول ما فيها", Array.isArray(busy.data?.holding) && busy.data.holding.length > 0, JSON.stringify(busy.data?.holding));
+  check("وهي باقية", (await owner("GET", "/companies")).data.some((c) => c.id === alpha.id));
+  check("وبياناتها سليمة", (await a("GET", "/products")).data?.length > 0);
+
+  section("٣٠) الحذف والرفض لمن يملكهما فقط");
+
+  check("أدمن الشركة لا يحذف شركة", (await a("DELETE", `/companies/${alpha.id}`)).status === 403);
+
+  const request = await call("POST", "/auth/signup", {
+    name: "طلب للرفض",
+    email: "reject.me@test.local",
+    joinCode: alpha.joinCode,
+  });
+  check("وصل طلب جديد", request.status === 202);
+
+  const target = (await a("GET", "/users")).data.find((u) => u.email === "reject.me@test.local");
+  check("ظهر لأدمن ألفا", Boolean(target));
+  check("والرفض يشيله", (await a("POST", `/users/${target.id}/reject`)).status === 200);
+  check("فعلًا", !(await a("GET", "/users")).data.some((u) => u.email === "reject.me@test.local"));
 }

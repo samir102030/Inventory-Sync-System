@@ -16,7 +16,8 @@ export const CASHIER_PAGES = [
   "/customers",
   "/warehouses",
   "/stock-shortage",
-  "/product-tracking",
+  // ‏/product-tracking ليست هنا: تعرض تكلفة الشراء وهامش الربح لكل صنف،
+  // والخادم يرفضها للكاشير. إبقاؤها في القائمة كان يعرض له صفحة تفشل بـ 403.
 ];
 
 /** صفحات لا يفتحها إلا مالك النظام. */

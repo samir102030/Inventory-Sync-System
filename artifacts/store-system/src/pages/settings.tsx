@@ -31,140 +31,6 @@ const ROLE_LABEL: Record<string, string> = {
 };
 import type { User, UserInputRole } from "@workspace/api-client-react/src/generated/api.schemas";
 
-/** ما يعيده الخادم بعد الموافقة — يُعرض للأدمن ليسلّم الكود يدويًا لو تعثّر البريد. */
-type ApprovalResult = {
-  activationCode: string;
-  emailSent: boolean;
-  emailError: string | null;
-};
-
-function PendingApprovals({ pendingUsers }: { pendingUsers: User[] }) {
-  const deleteUser = useDeleteUser();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [roleById, setRoleById] = useState<Record<number, UserInputRole>>({});
-  const [approved, setApproved] = useState<Record<number, ApprovalResult>>({});
-  const [busyId, setBusyId] = useState<number | null>(null);
-
-  if (pendingUsers.length === 0 && Object.keys(approved).length === 0) return null;
-
-  const handleApprove = async (user: User) => {
-    setBusyId(user.id);
-    try {
-      const result: ApprovalResult = await fetch(`/api/users/${user.id}/approve`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ role: roleById[user.id] || "cashier" }),
-      }).then(jsonOrThrow);
-
-      setApproved((prev) => ({ ...prev, [user.id]: result }));
-      queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
-      toast({
-        title: result.emailSent ? "تم القبول وأُرسل الكود بالبريد" : "تم القبول",
-        description: result.emailSent ? undefined : "تعذر إرسال البريد — سلّم الكود بنفسك.",
-      });
-    } catch (error: any) {
-      toast({ title: "تعذر قبول الطلب", description: error.message, variant: "destructive" });
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const handleReject = (user: User) => {
-    if (confirm(`هل تريد رفض طلب ${user.name}؟`)) {
-      deleteUser.mutate(
-        { id: user.id },
-        {
-          onSuccess: () => {
-            toast({ title: "تم رفض الطلب" });
-            queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
-          },
-        }
-      );
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>طلبات تسجيل جديدة</CardTitle>
-        <CardDescription>بانتظار موافقتك. عند القبول يُرسَل كود تفعيل على بريد صاحب الطلب.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {Object.entries(approved).map(([id, result]) => (
-          <div key={id} className="rounded-md border border-emerald-600/40 bg-emerald-50 p-3 text-sm dark:bg-emerald-950/30">
-            <div className="flex flex-wrap items-center gap-2">
-              <span>كود التفعيل:</span>
-              <code className="rounded bg-background px-2 py-1 text-base font-bold tracking-[0.3em]">
-                {result.activationCode}
-              </code>
-              <span className="text-muted-foreground">
-                {result.emailSent ? "(أُرسل بالبريد أيضًا)" : `(لم يُرسل: ${result.emailError})`}
-              </span>
-            </div>
-          </div>
-        ))}
-
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>الاسم</TableHead>
-              <TableHead>البريد الإلكتروني</TableHead>
-              <TableHead>الشركة</TableHead>
-              <TableHead>الصلاحية</TableHead>
-              <TableHead className="w-[120px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {pendingUsers.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.name}</TableCell>
-                <TableCell dir="ltr" className="text-right">{user.email}</TableCell>
-                <TableCell>
-                  {companyOf(user) ?? (
-                    <span className="text-amber-600">
-                      شركة جديدة: {(user as UserWithCompany).requestedCompanyName ?? "—"}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Select
-                    value={roleById[user.id] || "cashier"}
-                    onValueChange={(v) => setRoleById({ ...roleById, [user.id]: v as UserInputRole })}
-                  >
-                    <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">مدير النظام</SelectItem>
-                      <SelectItem value="cashier">كاشير</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-green-600"
-                      disabled={busyId === user.id}
-                      onClick={() => handleApprove(user)}
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleReject(user)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
 /**
  * الشركة التي ينتمي إليها المستخدم. الخادم يرسل الحقلين مع كل مستخدم لكن
  * مخطط OpenAPI لا يعرفهما بعد، والعميل المولّد لا يُحرَّر يدويًا.
@@ -193,8 +59,9 @@ function UsersManagement() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // الطلبات المعلّقة لها صفحتها الآن (`/requests`). كانت هنا فلا يراها أحد
+  // إلا بالصدفة، وطلبٌ لا يُرى هو عميل ينتظر بلا رد.
   const activeUsers = users?.filter((u) => u.status !== "pending") ?? [];
-  const pendingUsers = users?.filter((u) => u.status === "pending") ?? [];
 
   const handleOpenDialog = (user?: User) => {
     if (user) {
@@ -262,8 +129,6 @@ function UsersManagement() {
 
   return (
     <div className="space-y-6">
-      <PendingApprovals pendingUsers={pendingUsers} />
-
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
