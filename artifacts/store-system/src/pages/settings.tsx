@@ -437,6 +437,9 @@ type BackupPreview = {
 
 function BackupResetSection() {
   const { toast } = useToast();
+  /** الشركة التي ستمسحها إعادة الضبط. فارغة للمالك قبل أن يختار شركة. */
+  const { data: session } = useSession();
+  const resetTarget = activeCompanyOf(session)?.name ?? null;
   const [confirmText, setConfirmText] = useState("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -483,17 +486,16 @@ function BackupResetSection() {
     if (!preview) return;
     setRestoring(true);
     try {
-      const res = await fetch("/api/backup/restore", {
+      await fetch("/api/backup/restore", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(preview.raw),
-      });
-      if (!res.ok) throw new Error();
+      }).then(jsonOrThrow);
       toast({ title: "تم استعادة النسخة الاحتياطية — سيتم تحديث الصفحة" });
       setTimeout(() => window.location.reload(), 1500);
-    } catch {
-      toast({ title: "فشلت الاستعادة، حاول مجدداً", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "فشلت الاستعادة", description: error?.message, variant: "destructive" });
     } finally {
       setRestoring(false);
     }
@@ -501,9 +503,7 @@ function BackupResetSection() {
 
   const handleBackup = async () => {
     try {
-      const res = await fetch("/api/backup/export", { credentials: "include" });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await fetch("/api/backup/export", { credentials: "include" }).then(jsonOrThrow);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -512,20 +512,23 @@ function BackupResetSection() {
       a.click();
       URL.revokeObjectURL(url);
       toast({ title: "تم تنزيل النسخة الاحتياطية بنجاح" });
-    } catch {
-      toast({ title: "فشل تنزيل النسخة الاحتياطية", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "فشل تنزيل النسخة الاحتياطية", description: error?.message, variant: "destructive" });
     }
   };
 
   const handleReset = async () => {
     setResetting(true);
     try {
-      const res = await fetch("/api/backup/reset", { method: "POST", credentials: "include" });
-      if (!res.ok) throw new Error();
+      // ‏jsonOrThrow لا `if (!res.ok) throw new Error()`: الأخير يرمي رسالة
+      // الخادم ويترك المستخدم أمام كلمة "فشلت" بلا سبب. الخادم يقول هنا
+      // "اختر شركة أولًا" حين يكون المالك على "كل الشركات" — والرسالة هي كل
+      // ما يحتاجه ليعرف ماذا يفعل.
+      await fetch("/api/backup/reset", { method: "POST", credentials: "include" }).then(jsonOrThrow);
       toast({ title: "تم إعادة ضبط النظام — سيتم تحديث الصفحة" });
       setTimeout(() => window.location.reload(), 1500);
-    } catch {
-      toast({ title: "فشلت إعادة الضبط", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "فشلت إعادة الضبط", description: error?.message, variant: "destructive" });
     } finally {
       setResetting(false);
       setShowResetDialog(false);
@@ -632,11 +635,20 @@ function BackupResetSection() {
           <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
             <div>
               <p className="font-medium text-destructive">إعادة ضبط النظام بالكامل</p>
+              {/* الإعادة تمسح شركة واحدة. المالك على "كل الشركات" لا شركة له،
+                  فيُقال له ذلك قبل الضغط لا بعده. */}
               <p className="text-sm text-muted-foreground mt-0.5">
-                يمسح كل البيانات نهائياً — لا يمكن التراجع
+                {resetTarget
+                  ? `يمسح كل بيانات "${resetTarget}" نهائياً — لا يمكن التراجع`
+                  : "اختر شركة أولاً من الزر أسفل القائمة الجانبية — الإعادة تمسح شركة واحدة"}
               </p>
             </div>
-            <Button variant="destructive" className="shrink-0 gap-2" onClick={() => setShowResetDialog(true)}>
+            <Button
+              variant="destructive"
+              className="shrink-0 gap-2"
+              disabled={!resetTarget}
+              onClick={() => setShowResetDialog(true)}
+            >
               <RotateCcw className="h-4 w-4" /> إعادة الضبط
             </Button>
           </div>

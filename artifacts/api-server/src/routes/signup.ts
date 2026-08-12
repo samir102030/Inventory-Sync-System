@@ -63,6 +63,27 @@ function rateLimit(key: string, max: number, windowMs: number) {
   return true;
 }
 
+/** هل تجاوز هذا العنوان حدّه؟ لا يعدّ المحاولة — `countFailure` يفعل. */
+function overLimit(key: string, max: number) {
+  const entry = attempts.get(key);
+  return Boolean(entry && Date.now() <= entry.resetAt && entry.count >= max);
+}
+
+/**
+ * يعدّ محاولة فاشلة فقط.
+ *
+ * عدّ المحاولات الناجحة يعاقب الاستخدام الصحيح: مكتب يفعّل حسابات موظفيه في
+ * يوم واحد يخرج من عنوان إنترنت واحد، فيُقفل عليه بعد العاشر. الذي يُراد
+ * منعه هو تخمين الكود، والتخمين فاشل بطبيعته.
+ */
+function countFailure(key: string, windowMs: number) {
+  const now = Date.now();
+  const entry = attempts.get(key);
+
+  if (!entry || now > entry.resetAt) attempts.set(key, { count: 1, resetAt: now + windowMs });
+  else entry.count += 1;
+}
+
 // ---------------------------------------------------------------------------
 
 router.post("/auth/signup", async (req, res) => {
@@ -141,7 +162,10 @@ router.post("/auth/signup", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post("/auth/activate", async (req, res) => {
-  if (!rateLimit(`activate:${req.ip}`, 10, 15 * 60 * 1000)) {
+  const limitKey = `activate:${req.ip}`;
+  const WINDOW = 15 * 60 * 1000;
+
+  if (overLimit(limitKey, 10)) {
     return res.status(429).json({
       error: "محاولات كثيرة. جرّب بعد ربع ساعة.",
       code: "TOO_MANY_REQUESTS",
@@ -159,8 +183,10 @@ router.post("/auth/activate", async (req, res) => {
 
   const [user] = await rootDb.select().from(usersTable).where(eq(usersTable.email, email));
 
-  const invalid = () =>
-    res.status(400).json({ error: "الكود غير صحيح أو منتهي.", code: "BAD_CODE" });
+  const invalid = () => {
+    countFailure(limitKey, WINDOW);
+    return res.status(400).json({ error: "الكود غير صحيح أو منتهي.", code: "BAD_CODE" });
+  };
 
   if (!user || !user.activationCodeHash || user.status !== "invited") return invalid();
   if (user.activationExpiresAt && user.activationExpiresAt.getTime() < Date.now()) {
