@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { db, companiesTable, rootDb, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { ensureJoinCode, issueActivationCode } from "./signup";
+import { companyDataDeletionOrder } from "../lib/company-data";
 import { activationEmail, sendEmail } from "../lib/email";
 
 /**
@@ -242,15 +243,9 @@ router.delete("/companies/:id", async (req, res) => {
 
   if (!company) return res.status(404).json({ error: "الشركة غير موجودة." });
 
-  // الجداول تُقرأ من القاعدة لا من قائمة مكتوبة: قائمة تُنسى عند إضافة جدول
-  // جديد، فتُحذف شركة وفيها بيانات.
-  const { rows: tables } = await rootDb.execute<{ table_name: string }>(sql`
-    SELECT table_name FROM information_schema.columns
-    WHERE table_schema = 'public' AND column_name = 'company_id'
-    ORDER BY table_name
-  `);
-
-  const counted = tables.map((t) => t.table_name);
+  // الجداول وترتيبها من القاعدة لا من قائمة مكتوبة: قائمة تُنسى عند إضافة
+  // جدول جديد، فتُحذف شركة وفيها بيانات.
+  const counted = await companyDataDeletionOrder();
   const countSql = counted
     .map((t) => `SELECT '${t}' AS name, count(*)::int AS rows FROM "${t}" WHERE company_id = ${id}`)
     .join(" UNION ALL ");

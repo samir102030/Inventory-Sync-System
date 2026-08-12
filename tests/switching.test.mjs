@@ -60,8 +60,24 @@ export default async function run() {
   check("نسخة ألفا بلا أي صف من بيتا", !JSON.stringify(exportA.data).includes("بيتا"));
 
   const betaBefore = (await b("GET", "/products")).data?.length;
+
+  // جداول كانت خارج قائمة الحذف المكتوبة بيد، فتبقى بعد "إعادة الضبط الكامل".
+  const rental = await a("POST", "/rental", {
+    propertyName: "شقة",
+    tenantName: "مستأجر",
+    amount: 500,
+    period: "شهري",
+    date: "2026-08-12",
+  });
+  check("إنشاء دفعة إيجار للاختبار", rental.status < 400, `${rental.status}`);
+
   check("إعادة تعيين ألفا نجحت", (await a("POST", "/backup/reset")).status === 200);
   check("منتجات ألفا مُسحت", (await a("GET", "/products")).data?.length === 0);
+  check(
+    "ودفعات الإيجار كمان",
+    (await a("GET", "/rental")).data?.length === 0,
+    JSON.stringify((await a("GET", "/rental")).data),
+  );
 
   // TRUNCATE كان يتجاوز RLS تمامًا، فكانت هذه الضغطة تمسح كل الشركات.
   const betaAfter = (await b("GET", "/products")).data?.length;

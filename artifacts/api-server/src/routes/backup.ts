@@ -10,6 +10,7 @@ import {
   projectsTable, usersTable, invoiceSettingsTable,
 } from "@workspace/db";
 import { getTableColumns, sql } from "drizzle-orm";
+import { wipeCompanyData } from "../lib/company-data";
 
 const router = Router();
 
@@ -24,21 +25,13 @@ const router = Router();
  * يستطيع بضغطة "إعادة تعيين" أن يمسح بيانات كل الشركات. DELETE يخضع لها.
  */
 
-/* ─── الترتيب الآمن للحذف: الأبناء أولًا ─── */
-const DELETE_ORDER = [
-  "warehouse_transfer_items", "warehouse_transfers", "warehouse_stock", "warehouses",
-  "invoice_return_items", "invoice_returns", "invoice_items", "invoices",
-  "quotation_items", "quotations", "purchase_items", "purchases",
-  "account_transactions", "receipt_vouchers", "payment_vouchers",
-  "salary_payments", "employees", "expenses", "licenses", "projects",
-  "products", "categories", "customers", "suppliers", "accounts",
-];
-
-async function wipeCompanyData() {
-  for (const table of DELETE_ORDER) {
-    await db.execute(sql.raw(`DELETE FROM "${table}"`));
-  }
-}
+/**
+ * الجداول وترتيبها يأتيان من قاعدة البيانات (`lib/company-data.ts`).
+ *
+ * كانت مكتوبة هنا بيد، فسقط منها `rental_payments` و `jam3iyyat` وغيرهما:
+ * "إعادة الضبط الكامل" كانت تتركها كما هي.
+ */
+const wipe = () => wipeCompanyData(db);
 
 /* ─── FULL BACKUP ─── */
 router.get("/backup/export", async (_req, res) => {
@@ -125,7 +118,7 @@ router.get("/backup/export", async (_req, res) => {
 
 /* ─── FULL RESET ─── */
 router.post("/backup/reset", async (_req, res) => {
-  await wipeCompanyData();
+  await wipe();
   return res.json({ ok: true });
 });
 
@@ -247,7 +240,7 @@ router.post("/backup/restore", async (req, res) => {
     return res.status(400).json({ error: "ملف النسخة الاحتياطية غير صالح" });
   }
 
-  await wipeCompanyData();
+  await wipe();
 
   /** الرقم القديم ⇒ الرقم الجديد، لكل جدول. */
   const idMap: Record<string, Map<number, number>> = {};
