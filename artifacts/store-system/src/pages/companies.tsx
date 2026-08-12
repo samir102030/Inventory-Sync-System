@@ -38,11 +38,30 @@ type Form = {
   taxNumber: string;
   subscriptionEndsAt: string;
   notes: string;
+  /** مدير الشركة — يُنشأ معها في نفس الخطوة. */
+  adminName: string;
+  adminEmail: string;
+  adminPhone: string;
 };
 
 const EMPTY: Form = {
   name: "", phone: "", email: "", address: "",
   taxNumber: "", subscriptionEndsAt: "", notes: "",
+  adminName: "", adminEmail: "", adminPhone: "",
+};
+
+/** ما يعرضه النظام بعد إنشاء شركة: كودها، وكود تفعيل مديرها إن أُنشئ. */
+type Created = {
+  name: string;
+  joinCode: string | null;
+  adminError?: string | null;
+  admin: {
+    name: string;
+    email: string;
+    activationCode: string;
+    emailSent: boolean;
+    emailError: string | null;
+  } | null;
 };
 
 function daysUntil(dateStr: string | null): number | null {
@@ -69,6 +88,8 @@ export default function Companies() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
+  /** يُعرض بعد إنشاء شركة: كودها وكود تفعيل مديرها. لا يُعرَض ثانيةً. */
+  const [created, setCreated] = useState<Created | null>(null);
 
   const { data: companies = [], isLoading, isError, error } = useQuery<Company[]>({
     queryKey: ["companies"],
@@ -85,15 +106,33 @@ export default function Companies() {
         body: JSON.stringify(payload),
       }).then(jsonOrThrow);
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       qc.invalidateQueries({ queryKey: ["companies"] });
       setOpen(false);
-      toast({ title: editing ? "تم تعديل الشركة" : "تمت إضافة الشركة" });
+
+      if (editing) {
+        toast({ title: "تم تعديل الشركة" });
+        return;
+      }
+
+      // كود التفعيل يُعرض مرة واحدة ولا يُخزَّن نصًّا في أي مكان، فلا سبيل
+      // لاسترجاعه لاحقًا. يبقى أمام المالك حتى يغلقه بنفسه.
+      setCreated({
+        name: result?.name ?? form.name,
+        joinCode: result?.joinCode ?? null,
+        admin: result?.admin ?? null,
+        adminError: result?.adminError ?? null,
+      });
     },
     onError: (err: any) => {
       toast({ title: "تعذر الحفظ", description: err?.message, variant: "destructive" });
     },
   });
+
+  const copy = (value: string, label: string) => {
+    navigator.clipboard?.writeText(value);
+    toast({ title: `تم نسخ ${label}` });
+  };
 
   const toggleActive = useMutation({
     mutationFn: (company: Company) =>
@@ -121,6 +160,7 @@ export default function Companies() {
   const openEdit = (company: Company) => {
     setEditing(company);
     setForm({
+      ...EMPTY,
       name: company.name,
       phone: company.phone ?? "",
       email: company.email ?? "",
@@ -300,6 +340,47 @@ export default function Companies() {
               <Label>ملاحظات</Label>
               <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
+
+            {/* مدير الشركة يُنشأ معها. بيع النظام لعميل فعلٌ واحد: شركة وشخص
+                يدخل إليها — وفصلهما كان يترك شركة لا يستطيع أحد فتحها. */}
+            {!editing && (
+              <div className="space-y-3 rounded-md border border-dashed p-3">
+                <div>
+                  <p className="text-sm font-medium">مدير الشركة</p>
+                  <p className="text-xs text-muted-foreground">
+                    اختياري. لو ملأته، هيتبعتله كود تفعيل على بريده يختار بيه كلمة سره.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>الاسم</Label>
+                    <Input
+                      value={form.adminName}
+                      onChange={(e) => setForm({ ...form, adminName: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>التليفون</Label>
+                    <Input
+                      dir="ltr"
+                      className="text-right"
+                      value={form.adminPhone}
+                      onChange={(e) => setForm({ ...form, adminPhone: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>البريد الإلكتروني</Label>
+                  <Input
+                    type="email"
+                    dir="ltr"
+                    className="text-right"
+                    value={form.adminEmail}
+                    onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
@@ -310,6 +391,70 @@ export default function Companies() {
             >
               {save.isPending ? "جاري الحفظ..." : "حفظ"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* كود التفعيل يُخزَّن مبصومًا فقط، فلا يمكن استرجاعه بعد إغلاق هذه
+          الشاشة. تبقى مفتوحة حتى يغلقها المالك بنفسه. */}
+      <Dialog open={created !== null} onOpenChange={(v) => !v && setCreated(null)}>
+        <DialogContent dir="rtl" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>تمت إضافة {created?.name}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">كود انضمام الشركة</p>
+              <p className="text-xs text-muted-foreground">
+                يكتبه موظفو الشركة عند التسجيل، فتصل طلباتهم لمديرها.
+              </p>
+              <button
+                type="button"
+                onClick={() => created?.joinCode && copy(created.joinCode, "كود الانضمام")}
+                className="mt-1 w-full rounded-md bg-muted px-3 py-2 text-center font-mono text-lg tracking-[0.3em] hover:bg-accent"
+              >
+                {created?.joinCode ?? "—"}
+              </button>
+            </div>
+
+            {created?.admin && (
+              <div className="space-y-1 rounded-md border border-emerald-600/40 bg-emerald-50 p-3 dark:bg-emerald-950/30">
+                <p className="text-sm font-medium">كود تفعيل {created.admin.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {created.admin.emailSent
+                    ? `أُرسل على ${created.admin.email}. صالح لمدة ٧ أيام.`
+                    : `تعذّر إرسال البريد (${created.admin.emailError}) — سلّم الكود بنفسك.`}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => copy(created.admin!.activationCode, "كود التفعيل")}
+                  className="mt-1 w-full rounded-md bg-background px-3 py-2 text-center font-mono text-2xl font-bold tracking-[0.4em] hover:bg-accent"
+                >
+                  {created.admin.activationCode}
+                </button>
+                <p className="pt-1 text-xs text-muted-foreground">
+                  لن يظهر هذا الكود مرة أخرى. انسخه الآن إن احتجته.
+                </p>
+              </div>
+            )}
+
+            {created?.adminError && (
+              <p className="rounded-md border border-amber-500/50 bg-amber-50 p-3 text-sm dark:bg-amber-950/30">
+                {created.adminError}
+              </p>
+            )}
+
+            {!created?.admin && !created?.adminError && (
+              <p className="text-sm text-muted-foreground">
+                لم تضف مديرًا لهذه الشركة. تقدر تضيفه من الإعدادات، أو يسجّل هو
+                بنفسه بكود الانضمام أعلاه.
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={() => setCreated(null)}>تمام</Button>
           </div>
         </DialogContent>
       </Dialog>

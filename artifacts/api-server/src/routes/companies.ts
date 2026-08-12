@@ -1,7 +1,9 @@
 import { Router, type IRouter } from "express";
-import { db, companiesTable, usersTable } from "@workspace/db";
+import { randomBytes } from "node:crypto";
+import { db, companiesTable, rootDb, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { ensureJoinCode } from "./signup";
+import { ensureJoinCode, issueActivationCode } from "./signup";
+import { activationEmail, sendEmail } from "../lib/email";
 
 /**
  * إدارة الشركات — لمالك النظام وحده.
@@ -60,7 +62,17 @@ router.post("/companies", async (req, res) => {
     return res.status(400).json({ error: "اسم الشركة مطلوب." });
   }
 
-  const [company] = await db
+  /**
+   * ‏rootDb لا db، وكل ما بعده كذلك.
+   *
+   * إنشاء شركة فعلٌ خارج نطاق أي شركة بطبيعته. لو كُتب الصف داخل معاملة
+   * الطلب، لما رآه أي اتصال آخر قبل انتهائها — وكان توليد كود الانضمام يفشل
+   * ثم يسقط الطلب كله بـ 500. ولو كُتب حساب المدير داخلها لرفضته سياسة RLS
+   * حين يكون المالك مبدَّلًا إلى شركة أخرى.
+   *
+   * المسار للمالك وحده (`OWNER_ONLY_PREFIXES`)، فتجاوز النطاق هنا مقصود.
+   */
+  const [company] = await rootDb
     .insert(companiesTable)
     .values({
       name,
@@ -77,7 +89,77 @@ router.post("/companies", async (req, res) => {
   // كل شركة تحتاج كود انضمام من لحظة إنشائها ليسجّل موظفوها بأنفسهم.
   const joinCode = await ensureJoinCode(company.id);
 
-  return res.status(201).json({ ...company, joinCode });
+  /**
+   * أدمن الشركة يُنشأ معها في نفس الخطوة.
+   *
+   * بيع النظام لعميل جديد فعلٌ واحد: شركة وشخص يدخل إليها. فصلهما كان يعني
+   * إنشاء الشركة ثم الذهاب لشاشة أخرى وتذكّر اختيارها من قائمة — خطوة تُنسى
+   * فتبقى شركة لا يستطيع أحد دخولها.
+   *
+   * الحساب يولد بلا كلمة مرور، تمامًا كالمسجّل ذاتيًا: كود التفعيل يُرسَل
+   * بالبريد وصاحبه وحده يختار كلمته.
+   */
+  const adminName = clean(req.body?.adminName);
+  const adminEmail = clean(req.body?.adminEmail)?.toLowerCase() ?? null;
+
+  if (!adminName || !adminEmail) {
+    return res.status(201).json({ ...company, joinCode, admin: null });
+  }
+
+  const [taken] = await rootDb
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.email, adminEmail));
+
+  if (taken) {
+    // الشركة أُنشئت فعلًا؛ نقولها صراحةً بدل التراجع عنها بصمت.
+    return res.status(201).json({
+      ...company,
+      joinCode,
+      admin: null,
+      adminError: "هذا البريد مستخدم لحساب آخر. الشركة أُنشئت، أضف مديرها من الإعدادات.",
+    });
+  }
+
+  const base = adminEmail.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 20) || "admin";
+
+  const [admin] = await rootDb
+    .insert(usersTable)
+    .values({
+      username: `${base}_${randomBytes(3).toString("hex")}`,
+      name: adminName,
+      email: adminEmail,
+      phone: clean(req.body?.adminPhone),
+      role: "admin",
+      status: "pending",
+      passwordHash: null,
+      companyId: company.id,
+    })
+    .returning({ id: usersTable.id });
+
+  const { code, expiresAt } = await issueActivationCode(admin.id);
+
+  const appUrl = process.env.APP_URL ?? `${req.protocol}://${req.get("host")}`;
+  const message = activationEmail(adminName, code, appUrl);
+  const delivery = await sendEmail({
+    to: adminEmail,
+    toName: adminName,
+    subject: message.subject,
+    html: message.html,
+  });
+
+  return res.status(201).json({
+    ...company,
+    joinCode,
+    admin: {
+      name: adminName,
+      email: adminEmail,
+      activationCode: code,
+      expiresAt: expiresAt.toISOString(),
+      emailSent: delivery.sent,
+      emailError: delivery.reason ?? null,
+    },
+  });
 });
 
 router.patch("/companies/:id", async (req, res) => {

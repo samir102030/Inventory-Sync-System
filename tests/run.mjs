@@ -12,6 +12,7 @@ const SUITES = [
   ["switching", () => import("./switching.test.mjs")],
   ["numbering", () => import("./numbering.test.mjs")],
   ["signup", () => import("./signup.test.mjs")],
+  ["company-admin", () => import("./company-admin.test.mjs")],
   ["quotations", () => import("./quotations.test.mjs")],
 ];
 
