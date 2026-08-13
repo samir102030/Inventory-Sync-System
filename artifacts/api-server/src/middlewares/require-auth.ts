@@ -35,6 +35,8 @@ const CASHIER_READ = [
   "/auth",
   "/products",
   "/categories",
+  // البراندات جزء من الكتالوج. الراوت يعرض للكاشير المعتمد منها وحده.
+  "/brands",
   "/customers",
   "/invoices",
   "/quotations",
@@ -106,6 +108,26 @@ function cashierMayPass(method: string, path: string) {
 }
 
 // ---------------------------------------------------------------------------
+// المورّد: البراندات وحدها
+// ---------------------------------------------------------------------------
+
+/**
+ * المورّد يضيف البراندات ويعدّلها. لا يحذف، ولا يعتمد ما يضيفه.
+ *
+ * قائمة سماح لا قائمة منع: مسار جديد يُضاف للمشروع غدًا يكون ممنوعًا عليه
+ * تلقائيًا حتى يُسمح به صراحةً.
+ */
+function vendorMayPass(method: string, path: string) {
+  if (/^\/brands\/\d+\/approve$/.test(path)) return false;
+  if (method === "DELETE") return false;
+
+  if (method === "GET") return matches(path, "/auth") || matches(path, "/brands");
+  if (method === "POST" && path === "/auth/logout") return true;
+
+  return (method === "POST" || method === "PATCH") && matches(path, "/brands");
+}
+
+// ---------------------------------------------------------------------------
 // ما يُشترط فيه الأدمن
 // ---------------------------------------------------------------------------
 
@@ -161,6 +183,7 @@ export function requireRolePermissions(
   }
 
   if (role === "cashier" && cashierMayPass(method, path)) return next();
+  if (role === "vendor" && vendorMayPass(method, path)) return next();
 
   return res.status(403).json({
     error: "ليس لديك صلاحية للقيام بهذه العملية.",

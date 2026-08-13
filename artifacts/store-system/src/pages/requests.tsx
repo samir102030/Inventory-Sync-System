@@ -286,6 +286,7 @@ export default function Requests() {
                         <SelectContent>
                           <SelectItem value="admin">مدير النظام</SelectItem>
                           <SelectItem value="cashier">كاشير</SelectItem>
+                          <SelectItem value="vendor">مورّد</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>

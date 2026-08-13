@@ -29,6 +29,7 @@ const ROLE_LABEL: Record<string, string> = {
   owner: "مالك النظام",
   admin: "مدير النظام",
   cashier: "كاشير",
+  vendor: "مورّد",
 };
 import type { User, UserInputRole } from "@workspace/api-client-react/src/generated/api.schemas";
 
@@ -232,6 +233,7 @@ function UsersManagement() {
                     {isOwner && <SelectItem value="owner">مالك النظام</SelectItem>}
                     <SelectItem value="admin">مدير النظام</SelectItem>
                     <SelectItem value="cashier">كاشير</SelectItem>
+                    <SelectItem value="vendor">مورّد</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

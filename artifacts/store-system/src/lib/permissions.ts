@@ -20,6 +20,9 @@ export const CASHIER_PAGES = [
   // والخادم يرفضها للكاشير. إبقاؤها في القائمة كان يعرض له صفحة تفشل بـ 403.
 ];
 
+/** المورّد لا يفتح غير البراندات. */
+export const VENDOR_PAGES = ["/brands"];
+
 /** صفحات لا يفتحها إلا مالك النظام. */
 export const OWNER_PAGES = ["/companies"];
 
@@ -31,10 +34,15 @@ export function canOpenPage(role: string | undefined, path: string): boolean {
   if (role === "cashier") {
     return CASHIER_PAGES.some((p) => path === p || path.startsWith(p + "/"));
   }
+  if (role === "vendor") {
+    return VENDOR_PAGES.some((p) => path === p || path.startsWith(p + "/"));
+  }
   return false;
 }
 
 /** الصفحة التي يبدأ منها كل دور بعد تسجيل الدخول. */
 export function homePathFor(role: string | undefined): string {
-  return role === "cashier" ? "/pos" : "/dashboard";
+  if (role === "cashier") return "/pos";
+  if (role === "vendor") return "/brands";
+  return "/dashboard";
 }

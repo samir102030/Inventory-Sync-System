@@ -64,6 +64,13 @@
       "when": 1786650000000,
       "tag": "0008_invoice_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786660000000,
+      "tag": "0009_brands",
+      "breakpoints": true
     }
   ]
 }

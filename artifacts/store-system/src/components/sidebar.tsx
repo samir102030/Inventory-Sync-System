@@ -30,6 +30,7 @@ import {
   Building,
   Inbox,
   ClipboardCheck,
+  Tag,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -54,6 +55,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner: "مالك النظام",
   admin: "مدير النظام",
   cashier: "كاشير",
+  vendor: "مورّد",
   accountant: "محاسب",
   technician: "فني",
 };
@@ -89,6 +91,7 @@ const financeItems = [
 const inventoryItems = [
   { title: "المنتجات", url: "/products", icon: Package },
   { title: "الأقسام", url: "/categories", icon: Tags },
+  { title: "البراندات", url: "/brands", icon: Tag },
   { title: "المستودعات", url: "/warehouses", icon: Warehouse },
   { title: "تتبع المنتج", url: "/product-tracking", icon: ScanBarcode },
   { title: "نواقص البضاعة", url: "/stock-shortage", icon: AlertTriangle },

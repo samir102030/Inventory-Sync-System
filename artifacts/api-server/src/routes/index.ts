@@ -28,6 +28,7 @@ import jam3iyyatRouter from "./jam3iyyat";
 import creditCardsRouter from "./credit-cards";
 import banksRouter from "./banks";
 import companiesRouter from "./companies";
+import brandsRouter from "./brands";
 
 const router: IRouter = Router();
 
@@ -74,5 +75,6 @@ router.use(jam3iyyatRouter);
 router.use(creditCardsRouter);
 router.use(banksRouter);
 router.use(companiesRouter);
+router.use(brandsRouter);
 
 export default router;

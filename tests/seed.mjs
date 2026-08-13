@@ -16,8 +16,9 @@ export async function seed() {
 
   await client.query(`
     truncate table invoice_items, invoices, quotation_items, quotations,
-      account_transactions, accounts, products, categories, customers,
-      warehouses, invoice_settings, users, companies restart identity cascade
+      account_transactions, accounts, products, categories, brands, customers,
+      warehouses, rental_payments, invoice_settings, users, companies
+    restart identity cascade
   `);
 
   const { rows: companies } = await client.query(`
