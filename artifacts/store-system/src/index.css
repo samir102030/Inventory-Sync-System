@@ -74,63 +74,70 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
-  --border: 214 32% 91%;
+  /* الرمادي هنا شبه محايد (تشبّع منخفض جدًا) لا أزرق باهت.
+     الرماديات الباردة تُتعب العين في جلسة طويلة، والنظام يُستعمل طول اليوم. */
+  --background: 220 20% 97%;
+  --foreground: 222 25% 14%;
+  --border: 220 14% 90%;
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
-  
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 210 40% 98%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 33% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 33% 17%;
+  --card-foreground: 222 25% 14%;
+  --card-border: 220 14% 91%;
+
+  --sidebar: 222 30% 12%;
+  --sidebar-foreground: 220 16% 88%;
+  --sidebar-border: 222 22% 20%;
+  --sidebar-primary: 222 76% 56%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 222 24% 19%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 222 76% 56%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 222 25% 14%;
+  --popover-border: 220 14% 91%;
 
-  --primary: 221 83% 53%;
-  --primary-foreground: 210 40% 98%;
-  
-  --secondary: 214 32% 91%;
-  --secondary-foreground: 222 47% 11%;
-  
-  --muted: 214 32% 91%;
-  --muted-foreground: 215 16% 47%;
-  
-  --accent: 214 32% 91%;
-  --accent-foreground: 222 47% 11%;
+  --primary: 222 76% 50%;
+  --primary-foreground: 0 0% 100%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
+  /* ثلاثتها كانت قيمة واحدة، فلا فرق بين سطح ساكن وسطح تحت المؤشر.
+     التدرّج هو ما يعطي الإحساس بالعمق. */
+  --secondary: 220 16% 95%;
+  --secondary-foreground: 222 25% 20%;
 
-  --input: 214 32% 91%;
-  --ring: 221 83% 53%;
-  
-  --chart-1: 221 83% 53%;
-  --chart-2: 173 58% 39%;
-  --chart-3: 197 37% 24%;
-  --chart-4: 43 74% 66%;
-  --chart-5: 27 87% 67%;
+  --muted: 220 16% 95%;
+  --muted-foreground: 220 10% 46%;
 
-  --app-font-sans: 'Cairo', 'Inter', sans-serif;
+  --accent: 220 18% 92%;
+  --accent-foreground: 222 25% 14%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --input: 220 14% 90%;
+  --ring: 222 76% 50%;
+
+  /* لوحة معتمدة: مرّت فحوص عمى الألوان والتباين لكلا الوضعين. */
+  --chart-1: 213 68% 50%;
+  --chart-2: 17 82% 56%;
+  --chart-3: 159 73% 40%;
+  --chart-4: 41 100% 46%;
+  --chart-5: 337 70% 70%;
+
+  --app-font-sans: 'Cairo', 'Inter', system-ui, sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: Menlo, monospace;
-  --radius: 0.5rem;
+  --app-font-mono: 'JetBrains Mono', Menlo, monospace;
+  --radius: 0.75rem;
 
-  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0, 0.05);
-  --shadow-xs: 0px 1px 2px 0px rgba(0,0,0, 0.05);
-  --shadow-sm: 0px 1px 3px 0px rgba(0,0,0, 0.1), 0px 1px 2px -1px rgba(0,0,0, 0.1);
-  --shadow: 0px 1px 3px 0px rgba(0,0,0, 0.1), 0px 1px 2px -1px rgba(0,0,0, 0.1);
-  --shadow-md: 0px 4px 6px -1px rgba(0,0,0, 0.1), 0px 2px 4px -2px rgba(0,0,0, 0.1);
-  --shadow-lg: 0px 10px 15px -3px rgba(0,0,0, 0.1), 0px 4px 6px -4px rgba(0,0,0, 0.1);
-  --shadow-xl: 0px 20px 25px -5px rgba(0,0,0, 0.1), 0px 8px 10px -6px rgba(0,0,0, 0.1);
-  --shadow-2xl: 0px 25px 50px -12px rgba(0,0,0, 0.25);
+  /* ظلال ملوّنة بلون المحايد لا سوداء صريحة، وطبقتان لكل مستوى:
+     الأسود الصريح يطلع الشكل موحلًا. */
+  --shadow-2xs: 0 1px 2px 0 hsl(222 25% 14% / 0.04);
+  --shadow-xs: 0 1px 2px 0 hsl(222 25% 14% / 0.05);
+  --shadow-sm: 0 1px 2px 0 hsl(222 25% 14% / 0.04), 0 1px 3px 0 hsl(222 25% 14% / 0.06);
+  --shadow: 0 1px 3px 0 hsl(222 25% 14% / 0.05), 0 2px 8px -2px hsl(222 25% 14% / 0.06);
+  --shadow-md: 0 2px 4px -1px hsl(222 25% 14% / 0.05), 0 6px 16px -4px hsl(222 25% 14% / 0.10);
+  --shadow-lg: 0 4px 8px -2px hsl(222 25% 14% / 0.06), 0 12px 28px -6px hsl(222 25% 14% / 0.12);
+  --shadow-xl: 0 8px 16px -4px hsl(222 25% 14% / 0.08), 0 24px 48px -12px hsl(222 25% 14% / 0.16);
+  --shadow-2xl: 0 32px 64px -16px hsl(222 25% 14% / 0.24);
   
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -148,57 +155,161 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
-  --border: 217 33% 17%;
-  --card: 222 47% 11%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 17%;
-  
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 210 40% 98%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 33% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 33% 17%;
+  /* ‏`card` كان يساوي `background` بالضبط، فالكروت كانت غير مرئية في الوضع
+     الداكن: صفحة مسطّحة بلا حواف. السطح المرتفع لا بد أن يكون أفتح. */
+  --background: 222 24% 9%;
+  --foreground: 220 16% 94%;
+  --border: 222 18% 20%;
+  --card: 222 22% 12%;
+  --card-foreground: 220 16% 94%;
+  --card-border: 222 18% 20%;
 
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
+  --sidebar: 222 26% 10%;
+  --sidebar-foreground: 220 14% 84%;
+  --sidebar-border: 222 18% 18%;
+  --sidebar-primary: 222 76% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 222 20% 18%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 222 76% 60%;
 
-  --primary: 221 83% 53%;
-  --primary-foreground: 210 40% 98%;
-  
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 210 40% 98%;
-  
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20.2% 65.1%;
-  
-  --accent: 217 33% 17%;
-  --accent-foreground: 210 40% 98%;
+  --popover: 222 22% 13%;
+  --popover-foreground: 220 16% 94%;
+  --popover-border: 222 18% 22%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  --primary: 222 76% 60%;
+  --primary-foreground: 222 40% 8%;
 
-  --input: 217 33% 17%;
-  --ring: 224 76.3% 48%;
-  
-  --chart-1: 220 70% 50%;
-  --chart-2: 160 60% 45%;
-  --chart-3: 30 80% 55%;
-  --chart-4: 280 65% 60%;
-  --chart-5: 340 75% 55%;
+  --secondary: 222 20% 17%;
+  --secondary-foreground: 220 16% 94%;
+
+  --muted: 222 20% 16%;
+  --muted-foreground: 220 12% 65%;
+
+  --accent: 222 18% 22%;
+  --accent-foreground: 0 0% 100%;
+
+  /* كان 30% لمعة — أحمر داكن لا يُقرأ على خلفية داكنة. */
+  --destructive: 0 66% 52%;
+  --destructive-foreground: 0 0% 100%;
+
+  --input: 222 18% 22%;
+  --ring: 222 76% 60%;
+
+  /* نفس الأصباغ مخطوةً للسطح الداكن، لا لوحة أخرى. */
+  --chart-1: 213 77% 56%;
+  --chart-2: 17 70% 50%;
+  --chart-3: 159 73% 36%;
+  --chart-4: 40 100% 39%;
+  --chart-5: 338 61% 58%;
+
+  --shadow-2xs: 0 1px 2px 0 hsl(0 0% 0% / 0.20);
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.24);
+  --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.24), 0 1px 3px 0 hsl(0 0% 0% / 0.28);
+  --shadow: 0 1px 3px 0 hsl(0 0% 0% / 0.28), 0 2px 8px -2px hsl(0 0% 0% / 0.32);
+  --shadow-md: 0 2px 4px -1px hsl(0 0% 0% / 0.28), 0 6px 16px -4px hsl(0 0% 0% / 0.40);
+  --shadow-lg: 0 4px 8px -2px hsl(0 0% 0% / 0.30), 0 12px 28px -6px hsl(0 0% 0% / 0.45);
+  --shadow-xl: 0 8px 16px -4px hsl(0 0% 0% / 0.35), 0 24px 48px -12px hsl(0 0% 0% / 0.50);
+  --shadow-2xl: 0 32px 64px -16px hsl(0 0% 0% / 0.60);
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    /* العربية تحتاج سطرًا أوسع من اللاتينية لتُقرأ مرتاحة. */
+    line-height: 1.7;
+    text-rendering: optimizeLegibility;
+  }
+
+  /**
+   * أرقام بعرض واحد في الجداول والمبالغ.
+   *
+   * بلا هذا تتراقص خانات الأرقام رأسيًا فلا يمكن مسح عمود مبالغ بالعين —
+   * وهذا نظام يُقرأ فيه عمود المبالغ أكثر من أي شيء آخر.
+   */
+  table,
+  input[type="number"],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* العناوين أضيق تتبّعًا وأثقل قليلًا — تفصلها عن النص بلا تكبير مفرط. */
+  h1, h2, h3, h4 {
+    line-height: 1.35;
+    letter-spacing: -0.011em;
+  }
+
+  /* حلقة تركيز واحدة واضحة لكل عنصر — التنقل بالكيبورد يجب أن يُرى. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* شريط تمرير رفيع بلون الواجهة بدل الرمادي الافتراضي الفج. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /**
+   * حركة قصيرة على ما يُلمس فقط.
+   *
+   * القصد إحساس بالاستجابة لا استعراض: 150ms لا تُلاحَظ كحركة لكن غيابها
+   * يُلاحَظ كجفاف. وتُلغى تمامًا لمن يطلب تقليل الحركة.
+   */
+  button,
+  a,
+  [role="button"],
+  [role="menuitem"],
+  [role="option"],
+  input,
+  select,
+  textarea {
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  /* صف الجدول تحت المؤشر: أهم إشارة في شاشة مليانة صفوف. */
+  tbody tr {
+    transition: background-color 120ms ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

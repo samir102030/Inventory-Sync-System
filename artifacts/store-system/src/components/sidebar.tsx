@@ -123,6 +123,30 @@ const otherItems = [
   { title: "الإعدادات", url: "/settings", icon: Settings },
 ];
 
+/**
+ * عنوان الصفحة الحالية، مشتقٌّ من نفس قوائم التنقل.
+ *
+ * جدولٌ منفصل للعناوين كان سينحرف عن القائمة أول مرة يتغير اسم صفحة.
+ */
+const ALL_NAV_ITEMS = [
+  ...salesItems,
+  ...purchaseItems,
+  ...financeItems,
+  ...inventoryItems,
+  ...crmItems,
+  ...systemItems,
+  ...otherItems,
+];
+
+export function titleForPath(path: string): string {
+  // الأطول أولًا: ‏/invoice-approvals يجب ألا يلتقطه ‏/invoices.
+  const match = [...ALL_NAV_ITEMS]
+    .sort((a, b) => b.url.length - a.url.length)
+    .find((item) => path === item.url || path.startsWith(item.url + "/"));
+
+  return match?.title ?? "نظام ERP";
+}
+
 function NavGroup({ label, items, location }: { label: string; items: { title: string; url: string; icon: React.ComponentType<{ className?: string }> }[]; location: string }) {
   if (items.length === 0) return null;
   return (
