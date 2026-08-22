@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, dbContext, rootDb, usersTable } from "@workspace/db";
+import { SCOPE_ROLLBACK } from "./error-handler";
 
 /**
  * نطاق الشركة لكل طلب.
@@ -19,6 +20,23 @@ import { db, dbContext, rootDb, usersTable } from "@workspace/db";
 
 /** أقصى مدة تبقى فيها المعاملة مفتوحة إن لم يُنهِ المسار استجابته. */
 const MAX_REQUEST_MS = 30_000;
+
+/** كيف انتهى الطلب — يحدد أتُحفظ معاملته أم تُرجع. */
+type Outcome = "finished" | "timeout";
+
+/**
+ * خطأ لا يخرج من هذا الملف: وسيلته الوحيدة إجبار drizzle على ROLLBACK.
+ *
+ * `db.transaction` يحفظ ما لم يُرمَ خطأ من داخل دالتها، وخطأ الراوت لا يمر
+ * بها أصلًا — يذهب إلى معالج الأخطاء. فبلا هذا الخطأ المصطنع لا سبيل لإرجاع
+ * معاملة طلبٍ فشل.
+ */
+class ScopeRollback extends Error {
+  constructor(readonly outcome: Outcome) {
+    super(`scope rolled back: ${outcome}`);
+    this.name = "ScopeRollback";
+  }
+}
 
 /**
  * الشركة الفعّالة للطلب، كنص:
@@ -92,15 +110,15 @@ export function companyScope(req: Request, res: Response, next: NextFunction) {
           sql`select set_config('app.company_id', ${companyValue}, true)`,
         );
 
-        // المعاملة تبقى مفتوحة حتى تنتهي الاستجابة، ثم تُغلق (commit).
-        await new Promise<void>((resolve) => {
+        // المعاملة تبقى مفتوحة حتى تنتهي الاستجابة، ثم تُغلق.
+        const outcome = await new Promise<Outcome>((resolve) => {
           let settled = false;
 
-          const done = () => {
+          const done = (reason: Outcome) => {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
-            resolve();
+            resolve(reason);
           };
 
           const timer = setTimeout(() => {
@@ -108,23 +126,47 @@ export function companyScope(req: Request, res: Response, next: NextFunction) {
               { url: req.originalUrl },
               "Request never finished; closing its transaction to free the connection",
             );
-            done();
+            done("timeout");
           }, MAX_REQUEST_MS);
 
-          res.once("finish", done);
-          res.once("close", done);
+          res.once("finish", () => done("finished"));
+          res.once("close", () => done("finished"));
 
           dbContext.run(tx, () => {
             try {
               next();
             } catch (error) {
-              done();
+              done("finished");
               next(error);
             }
           });
         });
+
+        /**
+         * الطلب الذي لم ينجح لا يترك أثرًا نصفيًا.
+         *
+         * حالتان تُرجعان المعاملة:
+         *   • خطأ غير متوقع وصل إلى معالج الأخطاء (علامة على res.locals).
+         *   • طلب لم ينتهِ خلال MAX_REQUEST_MS، فنغلق معاملته لتحرير الاتصال
+         *     بينما هو ما زال في منتصف عمله.
+         *
+         * ما عداهما يُحفظ كما كان: رد ناجح، أو رفض مقصود من الراوت نفسه
+         * (400/403/409) — وهذا يسبق أي كتابة في كل مسارات النظام.
+         */
+        if (outcome === "timeout" || res.locals[SCOPE_ROLLBACK] === true) {
+          throw new ScopeRollback(outcome);
+        }
       });
     } catch (error) {
+      // إرجاعٌ مقصود: الرد أُرسل بالفعل، وليس هنا ما يُبلَّغ عنه للمستخدم.
+      if (error instanceof ScopeRollback) {
+        req.log?.warn(
+          { url: req.originalUrl, outcome: error.outcome },
+          "Request did not succeed; its writes were rolled back",
+        );
+        return;
+      }
+
       req.log?.error({ err: error }, "Company scope transaction failed");
 
       if (!res.headersSent) {

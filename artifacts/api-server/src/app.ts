@@ -7,6 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import pinoHttp from "pino-http";
 import { sessionPool } from "@workspace/db";
 import router from "./routes";
+import { apiErrorHandler, apiNotFound } from "./middlewares/error-handler";
 import { logger } from "./lib/logger";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -105,6 +106,18 @@ app.use("/api", (_req, res, next) => {
 });
 
 app.use("/api", router);
+
+// مسار /api غير معروف يرد JSON، لا صفحة الواجهة أدناه ولا HTML من Express.
+app.use("/api", apiNotFound);
+
+/**
+ * آخر ما يراه أي خطأ في الـ API.
+ *
+ * موضعه هنا — بعد الراوتر مباشرة وقبل الملفات الساكنة — مقصود: معالج الأخطاء
+ * لا يلتقط إلا ما يُرمى بعد تثبيته، ومعالج Express الافتراضي (الذي يرد HTML)
+ * هو البديل إن غاب.
+ */
+app.use("/api", apiErrorHandler);
 
 // --- Static frontend --------------------------------------------------------
 // The Vite build is copied to dist/client at build time. Serving it from the
