@@ -5,15 +5,39 @@ import { eq, sql } from "drizzle-orm";
 const router = Router();
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+/**
+ * التركيب له وجهان لا وجه واحد.
+ *
+ * `installationRevenue` ما يُحصَّل من العميل، و`installationCost` ما يُدفع
+ * للفني. كان الثاني وحده موجودًا فكان التركيب يظهر خصمًا دائمًا مهما كان
+ * الاتفاق مربحًا. الفصل يجعل ربح التركيب — الفرق بينهما — ظاهرًا وحده.
+ *
+ * صافي الربح يُحسب هنا وفي `GET /projects/:id` فقط. أي مكان ثالث يعيد
+ * كتابته يفترق عنه أول مرة يتغير أحدهما.
+ */
+function projectNetProfit(parts: {
+  totalRevenue: number;
+  installationRevenue: number;
+  totalExpenses: number;
+  installationCost: number;
+  maintenanceCost: number;
+}): number {
+  const income = parts.totalRevenue + parts.installationRevenue;
+  const outgo = parts.totalExpenses + parts.installationCost + parts.maintenanceCost;
+  return income - outgo;
+}
+
 function fmtProject(p: any, inv: any, exp: any, quot: any) {
+  const installationRevenue = Number(p.installationRevenue ?? 0);
   const installationCost = Number(p.installationCost ?? 0);
   const maintenanceCost  = Number(p.maintenanceCost  ?? 0);
   const totalRevenue     = inv.totalRevenue   ?? 0;
   const totalExpenses    = exp.totalExpenses  ?? 0;
   const totalQuotations  = quot.totalQuotations ?? 0;
-  const netProfit = totalRevenue - totalExpenses - installationCost - maintenanceCost;
+  const netProfit = projectNetProfit({ totalRevenue, installationRevenue, totalExpenses, installationCost, maintenanceCost });
   return {
     ...p,
+    installationRevenue,
     installationCost,
     maintenanceCost,
     totalRevenue,
@@ -38,6 +62,7 @@ router.get("/projects", async (req, res) => {
       customerId: projectsTable.customerId,
       customerName: customersTable.name,
       status: projectsTable.status,
+      installationRevenue: projectsTable.installationRevenue,
       installationCost: projectsTable.installationCost,
       maintenanceCost: projectsTable.maintenanceCost,
       startDate: projectsTable.startDate,
@@ -92,6 +117,7 @@ router.get("/projects/:id", async (req, res) => {
       customerName: customersTable.name,
       customerPhone: customersTable.phone,
       status: projectsTable.status,
+      installationRevenue: projectsTable.installationRevenue,
       installationCost: projectsTable.installationCost,
       maintenanceCost: projectsTable.maintenanceCost,
       startDate: projectsTable.startDate,
@@ -115,12 +141,14 @@ router.get("/projects/:id", async (req, res) => {
   const totalRevenue    = invoices.reduce((s, i) => s + Number(i.total), 0);
   const totalExpenses   = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const totalQuotations = quotations.reduce((s, q) => s + Number(q.total), 0);
+  const installationRevenue = Number(project.installationRevenue);
   const installationCost = Number(project.installationCost);
   const maintenanceCost  = Number(project.maintenanceCost);
-  const netProfit = totalRevenue - totalExpenses - installationCost - maintenanceCost;
+  const netProfit = projectNetProfit({ totalRevenue, installationRevenue, totalExpenses, installationCost, maintenanceCost });
 
   return res.json({
     ...project,
+    installationRevenue,
     installationCost,
     maintenanceCost,
     totalRevenue,
@@ -140,30 +168,32 @@ router.get("/projects/:id", async (req, res) => {
 
 // ── POST /projects ────────────────────────────────────────────────────────────
 router.post("/projects", async (req, res) => {
-  const { name, description, customerId, status, installationCost, maintenanceCost, startDate, endDate, notes } = req.body;
+  const { name, description, customerId, status, installationRevenue, installationCost, maintenanceCost, startDate, endDate, notes } = req.body;
   if (!name) return res.status(400).json({ error: "name required" });
   const [p] = await db.insert(projectsTable).values({
     name,
     description,
     customerId: customerId ? Number(customerId) : null,
     status: status ?? "active",
+    installationRevenue: String(installationRevenue ?? 0),
     installationCost: String(installationCost ?? 0),
     maintenanceCost:  String(maintenanceCost  ?? 0),
     startDate: startDate ?? null,
     endDate:   endDate   ?? null,
     notes,
   }).returning();
-  return res.status(201).json({ ...p, installationCost: Number(p.installationCost), maintenanceCost: Number(p.maintenanceCost), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() });
+  return res.status(201).json({ ...p, installationRevenue: Number(p.installationRevenue), installationCost: Number(p.installationCost), maintenanceCost: Number(p.maintenanceCost), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() });
 });
 
 // ── PATCH /projects/:id ───────────────────────────────────────────────────────
 router.patch("/projects/:id", async (req, res) => {
-  const { name, description, customerId, status, installationCost, maintenanceCost, startDate, endDate, notes } = req.body;
+  const { name, description, customerId, status, installationRevenue, installationCost, maintenanceCost, startDate, endDate, notes } = req.body;
   const updates: Record<string, any> = { updatedAt: new Date() };
   if (name              !== undefined) updates.name             = name;
   if (description       !== undefined) updates.description      = description;
   if (customerId        !== undefined) updates.customerId        = customerId ? Number(customerId) : null;
   if (status            !== undefined) updates.status           = status;
+  if (installationRevenue !== undefined) updates.installationRevenue = String(installationRevenue);
   if (installationCost  !== undefined) updates.installationCost = String(installationCost);
   if (maintenanceCost   !== undefined) updates.maintenanceCost  = String(maintenanceCost);
   if (startDate         !== undefined) updates.startDate        = startDate;
@@ -172,7 +202,7 @@ router.patch("/projects/:id", async (req, res) => {
 
   const [p] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, Number(req.params.id))).returning();
   if (!p) return res.status(404).json({ error: "Not found" });
-  return res.json({ ...p, installationCost: Number(p.installationCost), maintenanceCost: Number(p.maintenanceCost), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() });
+  return res.json({ ...p, installationRevenue: Number(p.installationRevenue), installationCost: Number(p.installationCost), maintenanceCost: Number(p.maintenanceCost), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() });
 });
 
 // ── DELETE /projects/:id ──────────────────────────────────────────────────────

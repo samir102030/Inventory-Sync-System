@@ -994,7 +994,7 @@ components:
   schemas:
     Project:
       type: object
-      required: [id, name, status, installationCost, totalRevenue, totalExpenses, netProfit, invoiceCount, expenseCount, createdAt, updatedAt]
+      required: [id, name, status, installationRevenue, installationCost, maintenanceCost, totalRevenue, totalExpenses, netProfit, invoiceCount, expenseCount, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -1009,7 +1009,13 @@ components:
         status:
           type: string
           enum: [active, completed, cancelled]
+        installationRevenue:
+          type: number
+          description: ما يُحصَّل من العميل مقابل التركيب. دخلٌ يُجمَع على صافي الربح.
         installationCost:
+          type: number
+          description: ما يُدفع للفني مقابل التركيب. تكلفةٌ تُخصَم من صافي الربح.
+        maintenanceCost:
           type: number
         startDate:
           type: ["string", "null"]
@@ -1061,7 +1067,11 @@ components:
         status:
           type: string
           enum: [active, completed, cancelled]
+        installationRevenue:
+          type: number
         installationCost:
+          type: number
+        maintenanceCost:
           type: number
         startDate:
           type: string
@@ -1082,7 +1092,11 @@ components:
         status:
           type: string
           enum: [active, completed, cancelled]
+        installationRevenue:
+          type: number
         installationCost:
+          type: number
+        maintenanceCost:
           type: number
         startDate:
           type: string

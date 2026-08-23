@@ -30,7 +30,7 @@ type Project = {
   id: number; name: string; description?: string | null;
   customerId?: number | null; customerName?: string | null;
   status: "active" | "completed" | "cancelled";
-  installationCost: number; maintenanceCost: number;
+  installationRevenue: number; installationCost: number; maintenanceCost: number;
   startDate?: string | null; endDate?: string | null; notes?: string | null;
   totalRevenue: number; totalExpenses: number; netProfit: number;
   invoiceCount: number; expenseCount: number;
@@ -66,6 +66,7 @@ function ProjectForm({ project, customers, onClose }: { project?: Project | null
     description: project?.description ?? "",
     customerId: project?.customerId ? String(project.customerId) : "",
     status: project?.status ?? "active",
+    installationRevenue: project?.installationRevenue != null ? String(project.installationRevenue) : "0",
     installationCost: project?.installationCost != null ? String(project.installationCost) : "0",
     maintenanceCost:  project?.maintenanceCost  != null ? String(project.maintenanceCost)  : "0",
     startDate: project?.startDate ?? "",
@@ -86,6 +87,9 @@ function ProjectForm({ project, customers, onClose }: { project?: Project | null
     onError: () => toast({ title: "حدث خطأ", variant: "destructive" }),
   });
 
+  /** ما يبقى من التركيب بعد أجر الفني — يُعرض تحت الحقلين وقت الكتابة. */
+  const installMargin = (Number(f.installationRevenue) || 0) - (Number(f.installationCost) || 0);
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!f.name.trim()) return;
@@ -93,6 +97,7 @@ function ProjectForm({ project, customers, onClose }: { project?: Project | null
       name: f.name, description: f.description || null,
       customerId: f.customerId ? Number(f.customerId) : null,
       status: f.status,
+      installationRevenue: Number(f.installationRevenue) || 0,
       installationCost: Number(f.installationCost) || 0,
       maintenanceCost:  Number(f.maintenanceCost)  || 0,
       startDate: f.startDate || null, endDate: f.endDate || null,
@@ -128,14 +133,30 @@ function ProjectForm({ project, customers, onClose }: { project?: Project | null
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
-          <Label>تكلفة التركيب (ج.م)</Label>
-          <Input type="number" min="0" step="0.01" value={f.installationCost} onChange={e => setF({ ...f, installationCost: e.target.value })} />
+        {/*
+          وجها التركيب متجاوران عمدًا: ما يُحصَّل وما يُدفع في سطر واحد، والفرق
+          بينهما مكتوب تحتهما لحظيًا — فلا يُحفظ اتفاق خاسر دون أن يراه صاحبه.
+        */}
+        <div className="col-span-2 grid grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label className="text-green-700">إجمالي التركيب (ج.م)</Label>
+            <Input type="number" min="0" step="0.01" className="border-green-300 focus-visible:ring-green-400"
+              value={f.installationRevenue} onChange={e => setF({ ...f, installationRevenue: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label>تكلفة التركيب (ج.م)</Label>
+            <Input type="number" min="0" step="0.01" value={f.installationCost} onChange={e => setF({ ...f, installationCost: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label>تكلفة الصيانة (ج.م)</Label>
+            <Input type="number" min="0" step="0.01" value={f.maintenanceCost} onChange={e => setF({ ...f, maintenanceCost: e.target.value })} />
+          </div>
         </div>
-        <div className="space-y-1">
-          <Label>تكلفة الصيانة (ج.م)</Label>
-          <Input type="number" min="0" step="0.01" value={f.maintenanceCost} onChange={e => setF({ ...f, maintenanceCost: e.target.value })} />
-        </div>
+        {installMargin !== 0 && (
+          <p className={`col-span-2 -mt-1 text-xs font-medium ${installMargin > 0 ? "text-green-700" : "text-red-700"}`}>
+            ربح التركيب: {cur(installMargin)}
+          </p>
+        )}
         <div className="space-y-1">
           <Label>تاريخ البدء</Label>
           <Input type="date" value={f.startDate} onChange={e => setF({ ...f, startDate: e.target.value })} />
@@ -279,7 +300,8 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
   const linkedInvIds   = new Set(detail.invoices.map(i => i.id));
   const linkedQuotIds  = new Set(detail.quotations.map(q => q.id));
   const linkedExpIds   = new Set(detail.expenses.map(e => e.id));
-  const totalCosts = detail.installationCost + detail.maintenanceCost + detail.totalExpenses;
+  const totalCosts  = detail.installationCost + detail.maintenanceCost + detail.totalExpenses;
+  const totalIncome = detail.totalRevenue + detail.installationRevenue;
 
   return (
     <div className="space-y-4 h-full">
@@ -316,6 +338,18 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
           <p className="font-bold text-violet-800 text-base">{cur(detail.totalQuotations)}</p>
           <p className="text-xs text-gray-400">{detail.quotations.length} عرض</p>
         </div>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 col-span-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-green-700">إجمالي التركيب</p>
+            <p className="font-bold text-green-800 text-base">{cur(detail.installationRevenue)}</p>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            ناقص تكلفة التركيب {cur(detail.installationCost)} ={" "}
+            <span className={detail.installationRevenue - detail.installationCost >= 0 ? "font-medium text-green-700" : "font-medium text-red-700"}>
+              {cur(detail.installationRevenue - detail.installationCost)}
+            </span>
+          </p>
+        </div>
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 col-span-2">
           <p className="text-xs text-orange-600 mb-1">تفصيلة التكاليف</p>
           <div className="grid grid-cols-3 gap-2 text-sm">
@@ -324,7 +358,7 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
               <p className="font-medium text-orange-800">{cur(detail.totalExpenses)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">تركيبات</p>
+              <p className="text-xs text-gray-500">تكلفة التركيب</p>
               <p className="font-medium text-orange-800">{cur(detail.installationCost)}</p>
             </div>
             <div>
@@ -338,7 +372,7 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
             <p className={`text-sm font-medium ${detail.netProfit >= 0 ? "text-green-700" : "text-red-700"}`}>صافي الربح</p>
             <p className={`text-xl font-bold ${detail.netProfit >= 0 ? "text-green-800" : "text-red-800"}`}>{cur(detail.netProfit)}</p>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">{cur(detail.totalRevenue)} إيرادات − {cur(totalCosts)} تكاليف</p>
+          <p className="text-xs text-gray-400 mt-0.5">{cur(totalIncome)} دخل (فواتير + تركيب) − {cur(totalCosts)} تكاليف</p>
         </div>
       </div>
 
@@ -654,7 +688,9 @@ export default function Projects() {
     return matchSearch && matchStatus;
   });
 
-  const totalRevenue = projects.reduce((s, p) => s + p.totalRevenue, 0);
+  // الدخل = الفواتير + إجمالي التركيب. التركيب يُحصَّل خارج الفاتورة أحيانًا،
+  // فجمعه هنا يجعل الكارت يطابق صافي الربح بدل أن يقل عنه بلا سبب ظاهر.
+  const totalRevenue = projects.reduce((s, p) => s + p.totalRevenue + p.installationRevenue, 0);
   const totalCosts   = projects.reduce((s, p) => s + p.totalExpenses + p.installationCost + p.maintenanceCost, 0);
   const totalProfit  = projects.reduce((s, p) => s + p.netProfit, 0);
   const activeCount  = projects.filter(p => p.status === "active").length;
@@ -673,7 +709,7 @@ export default function Projects() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">المشاريع</h1>
-          <p className="text-sm text-gray-500 mt-0.5">تتبع الفواتير وعروض الأسعار والمصاريف وتكاليف التركيب والصيانة لكل مشروع</p>
+          <p className="text-sm text-gray-500 mt-0.5">تتبع الفواتير وعروض الأسعار والمصاريف وإجمالي التركيب وتكاليفه والصيانة لكل مشروع</p>
         </div>
         <Button className="gap-2" onClick={() => setModal("create")}>
           <Plus className="h-4 w-4" /> مشروع جديد
@@ -764,7 +800,7 @@ export default function Projects() {
                     </TableCell>
                     {!selectedProject && (
                       <>
-                        <TableCell className="text-green-700 font-medium text-sm">{cur(p.totalRevenue)}</TableCell>
+                        <TableCell className="text-green-700 font-medium text-sm">{cur(p.totalRevenue + p.installationRevenue)}</TableCell>
                         <TableCell className="text-red-700 text-sm">{cur(p.totalExpenses + p.installationCost + p.maintenanceCost)}</TableCell>
                       </>
                     )}

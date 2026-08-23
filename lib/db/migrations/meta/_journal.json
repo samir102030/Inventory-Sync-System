@@ -71,6 +71,13 @@
       "when": 1786660000000,
       "tag": "0009_brands",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786670000000,
+      "tag": "0010_project_installation_revenue",
+      "breakpoints": true
     }
   ]
 }

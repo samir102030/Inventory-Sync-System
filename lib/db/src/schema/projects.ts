@@ -10,6 +10,9 @@ export const projectsTable = pgTable("projects", {
   description: text("description"),
   customerId: integer("customer_id").references(() => customersTable.id),
   status: text("status").notNull().default("active"), // active | completed | cancelled
+  // إجمالي التركيب: ما يُحصَّل من العميل. دخلٌ لا تكلفة — يُجمَع على الربح
+  // بينما `installationCost` أدناه يُخصَم منه، فربح التركيب وحده ظاهر.
+  installationRevenue: numeric("installation_revenue", { precision: 12, scale: 2 }).notNull().default("0"),
   installationCost: numeric("installation_cost", { precision: 12, scale: 2 }).notNull().default("0"),
   maintenanceCost: numeric("maintenance_cost", { precision: 12, scale: 2 }).notNull().default("0"),
   startDate: text("start_date"),
