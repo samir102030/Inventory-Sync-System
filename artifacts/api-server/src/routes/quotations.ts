@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { db, quotationsTable, quotationItemsTable, customersTable, productsTable, invoicesTable, invoiceItemsTable, invoiceSettingsTable, usersTable } from "@workspace/db";
-import { eq, sql, desc } from "drizzle-orm";
+import { db, quotationsTable, quotationItemsTable, customersTable, productsTable, invoicesTable, invoiceItemsTable, invoiceSettingsTable, usersTable, accountTransactionsTable, categoriesTable } from "@workspace/db";
+import { and, eq, ne, sql, desc } from "drizzle-orm";
+import { nextDocumentNumber } from "../lib/document-number";
 
 const router = Router();
 
@@ -65,6 +66,80 @@ async function currentUserName(req: any): Promise<string | null> {
     .from(usersTable)
     .where(eq(usersTable.id, userId));
   return user?.name ?? null;
+}
+
+/** القسم الذي تنزل فيه المنتجات المُنشأة تلقائيًا. يُنشأ مرة واحدة. */
+const AUTO_CATEGORY = "غير مصنف";
+
+async function ensureAutoCategory(): Promise<number> {
+  const [existing] = await db
+    .select({ id: categoriesTable.id })
+    .from(categoriesTable)
+    .where(sql`lower(trim(${categoriesTable.name})) = ${AUTO_CATEGORY}`)
+    .limit(1);
+  if (existing) return existing.id;
+
+  const [created] = await db
+    .insert(categoriesTable)
+    .values({ name: AUTO_CATEGORY, description: "أصناف أُنشئت تلقائيًا عند تحويل عرض سعر" })
+    .returning({ id: categoriesTable.id });
+  return created.id;
+}
+
+/**
+ * البند المكتوب بالإيد يصير منتجًا في الكتالوج.
+ *
+ * عروض الأسعار تُكتب بنودها بالإيد قبل أن يُدخَل الصنف الكتالوج، فكان
+ * التحويل يُرفض كاملًا ويُطلب من صاحبه أن يُدخِل عشرين صنفًا يدويًا قبل أن
+ * يفوتر بيعة تمّت. الإنشاء هنا يزيل هذه الخطوة.
+ *
+ * المطابقة بالاسم أولًا: صنف موجود لا يُكرَّر، ولو تكرر الاسم داخل العرض
+ * نفسه أُنشئ مرة واحدة وارتبط البندان به.
+ *
+ * المخزون الابتدائي = الكمية المباعة، لأن الخصم التالي يُنزله إلى صفر —
+ * وصفرٌ أصدق من سالبٍ لصنف لم يُسجَّل أصلًا. والتكلفة تبدأ صفرًا لأننا لا
+ * نعرفها؛ صاحبها يكتبها، وحتى يكتبها يظهر ربح الفاتورة أعلى من حقيقته.
+ */
+async function findOrCreateProduct(
+  name: string,
+  unitPrice: string,
+  quantity: string,
+  cache: Map<string, number>,
+): Promise<number> {
+  const key = String(name ?? "").trim().toLowerCase();
+
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const [existing] = await db
+    .select({ id: productsTable.id })
+    .from(productsTable)
+    .where(sql`lower(trim(${productsTable.name})) = ${key}`)
+    .limit(1);
+
+  if (existing) {
+    cache.set(key, existing.id);
+    return existing.id;
+  }
+
+  const categoryId = await ensureAutoCategory();
+  const openingStock = Math.max(0, Math.round(Number(quantity) || 0));
+
+  const [created] = await db
+    .insert(productsTable)
+    .values({
+      name: String(name).trim(),
+      price: String(unitPrice ?? 0),
+      costPrice: null,
+      categoryId,
+      stock: openingStock,
+      minStock: 5,
+      unit: "قطعة",
+    })
+    .returning({ id: productsTable.id });
+
+  cache.set(key, created.id);
+  return created.id;
 }
 
 function formatQuotation(q: any, customerName?: string | null) {
@@ -241,70 +316,210 @@ router.delete("/quotations/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * تحويل عرض سعر إلى فاتورة.
+ *
+ * الفاتورة الناتجة يجب أن تكون فاتورة كاملة لا هيكلًا يشبهها. كانت هنا
+ * تُبنى بالإيد فتخرج ناقصة في ستة أوجه: لا تخصم مخزونًا، ولا تحمل سعر
+ * تكلفة، ولا باركود، ولا حالة اعتماد، ولا حركة خزنة، ولا تعرف مشروعها.
+ * كل ما يفعله `POST /invoices` يُفعل هنا.
+ *
+ * أخطرها كان المخزون: `PATCH /invoices/:id` يُرجع الكميات إلى المخزون عند
+ * الإلغاء، مستنتجًا من وجود سطور الفاتورة أنها خُصمت. فكانت فاتورة محوَّلة
+ * ثم ملغاة تخلق بضاعة من العدم — بضغطتين من قائمة الحالة.
+ *
+ * والمستخدم يختار: مسودة (لم تُقبض بعد) أو مدفوعة (تمّت). المخزون يخرج في
+ * الحالتين — كما في البيع المباشر تمامًا — لأن "مسودة" تعني أن النقود لم
+ * تُقبض، لا أن البضاعة لم تخرج.
+ */
 router.post("/quotations/:id/convert", async (req, res) => {
   const id = Number(req.params.id);
+  const { status, paymentMethod, accountId } = (req.body ?? {}) as {
+    status?: string;
+    paymentMethod?: string;
+    accountId?: number | string | null;
+  };
+
+  const invoiceStatus = status === "paid" ? "paid" : "draft";
+  const method = paymentMethod || "cash";
+  const account = accountId ? Number(accountId) : null;
 
   const [q] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, id));
-  if (!q) return res.status(404).json({ error: "not found" });
+  if (!q) return res.status(404).json({ error: "العرض غير موجود." });
+
+  if (q.status === "converted") {
+    return res.status(409).json({
+      error: "هذا العرض محوَّل إلى فاتورة بالفعل. افتح الفواتير للاطلاع عليها.",
+      code: "ALREADY_CONVERTED",
+    });
+  }
 
   const items = await db.select().from(quotationItemsTable).where(eq(quotationItemsTable.quotationId, id));
+  if (items.length === 0) {
+    return res.status(400).json({ error: "لا يمكن تحويل عرض بلا بنود.", code: "EMPTY_QUOTATION" });
+  }
 
-  // invoice_items.product_id is NOT NULL, so a quotation line typed by hand
-  // (no catalogue product behind it) would fail at insert time with an opaque
-  // database error. Fail early with something the user can act on instead.
-  const unlinked = items.filter((i) => !i.productId).map((i) => i.productName);
-  if (unlinked.length > 0) {
+  // البيع الآجل دَينٌ على أحد: بلا عميل لا يُقيَّد في أي حساب. نفس شرط POST /invoices.
+  if (method === "credit" && !q.customerId) {
     return res.status(400).json({
-      error:
-        "لا يمكن تحويل العرض لفاتورة لأن البنود التالية غير مرتبطة بمنتج من المخزن: " +
-        unlinked.join("، ") +
-        ". افتح العرض واختر المنتج لكل بند منهم، أو أضفه للمنتجات أولاً.",
-      code: "UNLINKED_ITEMS",
-      items: unlinked,
+      error: "البيع الآجل يحتاج عميلًا. افتح العرض واختر العميل أولًا.",
+      code: "CREDIT_NEEDS_CUSTOMER",
+    });
+  }
+
+  /**
+   * تحقق للقراءة وحدها قبل الحجز.
+   *
+   * كل ما بعد الحجز كتابة، و`return` برفض لا يُرجع معاملة الطلب — فيبقى
+   * العرض محجوزًا بلا فاتورة. لذلك كل ما قد يرفض الطلب يقع هنا.
+   */
+  for (const item of items) {
+    if (!item.productId) continue;
+    const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.id, item.productId)).limit(1);
+    if (!product) {
+      return res.status(400).json({
+        error: `المنتج المرتبط بالبند "${item.productName}" لم يعد موجودًا. افتح العرض وصحّح البند.`,
+        code: "PRODUCT_GONE",
+      });
+    }
+  }
+
+  /**
+   * حجز العرض قبل أي كتابة.
+   *
+   * التحديث المشروط يقرأ ويكتب في خطوة واحدة، فطلبان متزامنان لا يمرّان
+   * معًا: الثاني لا يجد صفًا فيرتد. الفحص المنفصل أعلاه لرسالة مفهومة،
+   * وهذا السطر هو المنع الفعلي. وكل ما بعده داخل معاملة الطلب نفسها،
+   * فإن فشل شيء رجع الحجز معه.
+   */
+  const [claimed] = await db
+    .update(quotationsTable)
+    .set({ status: "converted" })
+    .where(and(eq(quotationsTable.id, id), ne(quotationsTable.status, "converted")))
+    .returning({ id: quotationsTable.id });
+
+  if (!claimed) {
+    return res.status(409).json({
+      error: "هذا العرض محوَّل إلى فاتورة بالفعل.",
+      code: "ALREADY_CONVERTED",
+    });
+  }
+
+  /**
+   * السطور تُبنى بعد الحجز لأن بناءها قد يُنشئ منتجات — كتابةٌ لا يصح أن
+   * تقع لطلب سيرتد. وكل هذا داخل معاملة الطلب، فإن فشل شيء بعده رجع معه.
+   */
+  const productCache = new Map<string, number>();
+  let createdProducts = 0;
+
+  const lines: Array<{
+    productId: number;
+    productName: string;
+    barcode: string | null;
+    costPrice: string;
+    quantity: string;
+    unitPrice: string;
+    discount: string;
+    total: string;
+  }> = [];
+
+  for (const item of items) {
+    let productId = item.productId ?? null;
+
+    if (productId == null) {
+      const before = productCache.size;
+      productId = await findOrCreateProduct(item.productName, item.unitPrice, item.quantity, productCache);
+      if (productCache.size > before) createdProducts++;
+    }
+
+    const [product] = await db
+      .select({ barcode: productsTable.barcode, costPrice: productsTable.costPrice })
+      .from(productsTable)
+      .where(eq(productsTable.id, productId))
+      .limit(1);
+
+    lines.push({
+      productId,
+      productName: item.productName,
+      barcode: product?.barcode ?? null,
+      costPrice: String(product?.costPrice ?? 0),
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      // خصم البند ينتقل مع البند: بدونه ترتفع الفاتورة عن العرض المتفق عليه.
+      discount: item.discount ?? "0",
+      total: item.total,
     });
   }
 
   const settings = await db.select().from(invoiceSettingsTable).limit(1);
   const prefix = settings[0]?.invoicePrefix ?? "INV";
-  const [maxRow] = await db
-    .select({
-      max: sql<number>`COALESCE(MAX(NULLIF(SUBSTRING(${invoicesTable.invoiceNumber} FROM '[0-9]+$'), '')::int), 0)`,
-    })
-    .from(invoicesTable);
-  const num = (Number(maxRow?.max ?? 0) + 1).toString().padStart(5, "0");
-  const invoiceNumber = `${prefix}-${num}`;
+  const invoiceNumber = await nextDocumentNumber("invoices", "invoice_number", prefix);
 
   const [invoice] = await db.insert(invoicesTable).values({
     invoiceNumber,
     customerId: q.customerId,
+    accountId: account,
+    // العرض المربوط بمشروع تصير فاتورته مربوطة به، وإلا بقي إيراد المشروع صفرًا.
+    projectId: q.projectId ?? null,
     subtotal: q.subtotal,
     discount: q.discount,
     tax: q.tax,
     total: q.total,
-    paymentMethod: "cash",
-    status: "draft",
+    paymentMethod: method,
+    status: invoiceStatus,
     notes: q.notes,
     createdBy: await currentUserName(req),
+    /**
+     * فاتورة الكاشير تنتظر مراجعة الأدمن — كما في `POST /invoices`.
+     *
+     * بدون هذا السطر كان الكاشير يكتب عرضًا ويحوّله فتخرج الفاتورة معتمدة
+     * تلقائيًا ولا تدخل طابور المراجعة، فتصير المراجعة كلها اسمًا بلا معنى.
+     */
+    approvalStatus: (req.session as any)?.role === "cashier" ? "pending" : "approved",
   }).returning();
 
-  if (items.length > 0) {
-    await db.insert(invoiceItemsTable).values(
-      items.map(i => ({
-        invoiceId: invoice.id,
-        productId: i.productId!,
-        productName: i.productName,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        // خصم البند ينتقل مع البند: بدونه ترتفع الفاتورة عن العرض المتفق عليه.
-        discount: i.discount ?? "0",
-        total: i.total,
-      }))
-    );
+  await db.insert(invoiceItemsTable).values(
+    lines.map((l) => ({
+      invoiceId: invoice.id,
+      productId: l.productId,
+      productName: l.productName,
+      barcode: l.barcode,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      costPrice: l.costPrice,
+      discount: l.discount,
+      total: l.total,
+    }))
+  );
+
+  // كل سطر صار له منتج — المُنشأ حديثًا مخزونه الابتدائي = الكمية، فينزل هنا إلى صفر.
+  for (const l of lines) {
+    await db
+      .update(productsTable)
+      .set({ stock: sql`${productsTable.stock} - ${l.quantity}` })
+      .where(eq(productsTable.id, l.productId));
   }
 
-  await db.update(quotationsTable).set({ status: "converted" }).where(eq(quotationsTable.id, id));
+  // النقدية تدخل الخزنة عند "مدفوعة" فقط، والآجل دَين لا نقد.
+  const total = Number(q.total);
+  if (invoiceStatus === "paid" && account && method !== "credit" && total > 0) {
+    await db.insert(accountTransactionsTable).values({
+      accountId: account,
+      direction: "in",
+      amount: String(total),
+      description: `فاتورة مبيعات رقم ${invoiceNumber} (من عرض ${q.quotationNumber})`,
+      category: "مبيعات",
+      date: new Date().toISOString().slice(0, 10),
+      reference: `invoice:${invoice.id}`,
+    });
+  }
 
-  return res.json({ invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber });
+  return res.json({
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    status: invoice.status,
+    createdProducts,
+  });
 });
 
 export default router;

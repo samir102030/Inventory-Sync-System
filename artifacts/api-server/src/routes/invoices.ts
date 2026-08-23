@@ -290,6 +290,9 @@ router.patch("/invoices/:id", async (req, res) => {
     if (status === "cancelled" && inv.status !== "cancelled") {
       const items = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
       for (const item of items) {
+        // بندٌ بلا منتج (خدمة، أو صنف خارج الكتالوج) لم يخصم مخزونًا عند
+        // البيع، فلا شيء يُرد إليه عند الإلغاء.
+        if (item.productId == null) continue;
         await db.update(productsTable).set({ stock: sql`${productsTable.stock} + ${item.quantity}` }).where(eq(productsTable.id, item.productId));
       }
       await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`));
@@ -389,8 +392,15 @@ router.post("/invoices/:id/return", async (req, res) => {
   const returnItems: Array<{ productId: number; productName: string; quantity: number; unitPrice: number; total: number }> = [];
 
   for (const retItem of items) {
-    const original = originalItems.find(o => o.productId === Number(retItem.productId));
+    const original = originalItems.find(o => o.productId != null && o.productId === Number(retItem.productId));
     if (!original) return res.status(400).json({ error: `Item not found in invoice` });
+    // المرتجع حركة مخزون قبل أن يكون حركة مال: بندٌ بلا منتج لا يُرد.
+    if (original.productId == null) {
+      return res.status(400).json({
+        error: `البند "${original.productName}" ليس منتجًا من المخزن، فلا يمكن إرجاعه.`,
+        code: "ITEM_NOT_STOCKED",
+      });
+    }
     const qty = Number(retItem.quantity);
     if (qty <= 0) continue;
     if (qty > Number(original.quantity)) return res.status(400).json({ error: `Cannot return more than original quantity for ${original.productName}` });

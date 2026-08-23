@@ -38,7 +38,16 @@ export const invoiceItemsTable = pgTable("invoice_items", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id"),
   invoiceId: integer("invoice_id").notNull().references(() => invoicesTable.id, { onDelete: "cascade" }),
-  productId: integer("product_id").notNull().references(() => productsTable.id),
+  /**
+   * سطر بلا منتج مسموح — كما في `quotation_items` تمامًا.
+   *
+   * كان `NOT NULL`، فكان كل عرض سعر بنوده مكتوبة بالإيد (أعمال حفر، برمجة،
+   * صنف لم يُدخَل الكتالوج بعد) يُرفض تحويله إلى فاتورة رفضًا كاملًا. والعرض
+   * يقبلها منذ اليوم الأول، فكان النظام يسمح بكتابة اتفاق لا يستطيع فوترته.
+   *
+   * ما لا منتج له لا مخزون له: مسارات المخزون تتخطى هذه السطور صراحةً.
+   */
+  productId: integer("product_id").references(() => productsTable.id),
   productName: text("product_name").notNull(),
   barcode: text("barcode"),
   quantity: numeric("quantity", { precision: 10, scale: 3 }).notNull(),
