@@ -68,6 +68,11 @@ async function currentUserName(req: any): Promise<string | null> {
   return user?.name ?? null;
 }
 
+/** مفتاح المطابقة بالاسم — واحدٌ للبحث وللتجميع، فلا يفترقان. */
+function productKey(name: unknown): string {
+  return String(name ?? "").trim().toLowerCase();
+}
+
 /** القسم الذي تنزل فيه المنتجات المُنشأة تلقائيًا. يُنشأ مرة واحدة. */
 const AUTO_CATEGORY = "غير مصنف";
 
@@ -94,22 +99,28 @@ async function ensureAutoCategory(): Promise<number> {
  * يفوتر بيعة تمّت. الإنشاء هنا يزيل هذه الخطوة.
  *
  * المطابقة بالاسم أولًا: صنف موجود لا يُكرَّر، ولو تكرر الاسم داخل العرض
- * نفسه أُنشئ مرة واحدة وارتبط البندان به.
+ * نفسه أُنشئ مرة واحدة وارتبط به كل سطوره.
  *
- * المخزون الابتدائي = الكمية المباعة، لأن الخصم التالي يُنزله إلى صفر —
- * وصفرٌ أصدق من سالبٍ لصنف لم يُسجَّل أصلًا. والتكلفة تبدأ صفرًا لأننا لا
- * نعرفها؛ صاحبها يكتبها، وحتى يكتبها يظهر ربح الفاتورة أعلى من حقيقته.
+ * `openingStock` هو مجموع كميات كل السطور التي تحمل هذا الاسم، لا كمية
+ * السطر الأول وحده. الخصم يجري لكل سطر على حدة، فمخزونٌ ابتدائي من سطر
+ * واحد يترك الصنف سالبًا بباقي السطور — صنفٌ وُلد مدينًا.
+ *
+ * والصنف الموجود سلفًا لا يُمس مخزونه هنا: رصيده حقيقي، والخصم وحده يعمل
+ * عليه كأي بيعة.
+ *
+ * التكلفة تبدأ فارغة لأننا لا نعرفها؛ صاحبها يكتبها، وحتى يكتبها يظهر ربح
+ * الفاتورة أعلى من حقيقته.
  */
 async function findOrCreateProduct(
   name: string,
   unitPrice: string,
-  quantity: string,
+  openingStock: number,
   cache: Map<string, number>,
-): Promise<number> {
-  const key = String(name ?? "").trim().toLowerCase();
+): Promise<{ id: number; created: boolean }> {
+  const key = productKey(name);
 
   const cached = cache.get(key);
-  if (cached) return cached;
+  if (cached) return { id: cached, created: false };
 
   const [existing] = await db
     .select({ id: productsTable.id })
@@ -119,11 +130,10 @@ async function findOrCreateProduct(
 
   if (existing) {
     cache.set(key, existing.id);
-    return existing.id;
+    return { id: existing.id, created: false };
   }
 
   const categoryId = await ensureAutoCategory();
-  const openingStock = Math.max(0, Math.round(Number(quantity) || 0));
 
   const [created] = await db
     .insert(productsTable)
@@ -132,14 +142,14 @@ async function findOrCreateProduct(
       price: String(unitPrice ?? 0),
       costPrice: null,
       categoryId,
-      stock: openingStock,
+      stock: Math.max(0, Math.round(openingStock || 0)),
       minStock: 5,
       unit: "قطعة",
     })
     .returning({ id: productsTable.id });
 
   cache.set(key, created.id);
-  return created.id;
+  return { id: created.id, created: true };
 }
 
 function formatQuotation(q: any, customerName?: string | null) {
@@ -467,6 +477,20 @@ router.post("/quotations/:id/convert", async (req, res) => {
    * السطور تُبنى بعد الحجز لأن بناءها قد يُنشئ منتجات — كتابةٌ لا يصح أن
    * تقع لطلب سيرتد. وكل هذا داخل معاملة الطلب، فإن فشل شيء بعده رجع معه.
    */
+  /**
+   * مجموع الكمية لكل اسم غير مرتبط، قبل أي إنشاء.
+   *
+   * السطران اللذان يحملان الاسم نفسه يصيران منتجًا واحدًا، والخصم يجري
+   * مرتين. فلو كان المخزون الابتدائي كمية السطر الأول وحده لخرج الصنف
+   * سالبًا من أول تحويل.
+   */
+  const openingByName = new Map<string, number>();
+  for (const item of items) {
+    if (item.productId) continue;
+    const key = productKey(item.productName);
+    openingByName.set(key, (openingByName.get(key) ?? 0) + (Number(item.quantity) || 0));
+  }
+
   const productCache = new Map<string, number>();
   let createdProducts = 0;
 
@@ -485,9 +509,16 @@ router.post("/quotations/:id/convert", async (req, res) => {
     let productId = item.productId ?? null;
 
     if (productId == null) {
-      const before = productCache.size;
-      productId = await findOrCreateProduct(item.productName, item.unitPrice, item.quantity, productCache);
-      if (productCache.size > before) createdProducts++;
+      // `created` من الدالة نفسها لا من حجم الذاكرة: الذاكرة تنمو أيضًا حين
+      // يُطابَق صنف موجود، فكان العدّاد يبلّغ عن إضافات لم تحدث.
+      const resolved = await findOrCreateProduct(
+        item.productName,
+        item.unitPrice,
+        openingByName.get(productKey(item.productName)) ?? 0,
+        productCache,
+      );
+      productId = resolved.id;
+      if (resolved.created) createdProducts++;
     }
 
     const [product] = await db
