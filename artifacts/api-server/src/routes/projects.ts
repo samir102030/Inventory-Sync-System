@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, projectsTable, invoicesTable, expensesTable, customersTable, quotationsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, projectsTable, invoicesTable, invoiceItemsTable, expensesTable, customersTable, quotationsTable } from "@workspace/db";
+import { eq, inArray, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -19,22 +19,33 @@ function projectNetProfit(parts: {
   totalRevenue: number;
   installationRevenue: number;
   totalExpenses: number;
+  totalCostOfGoods: number;
   installationCost: number;
   maintenanceCost: number;
 }): number {
   const income = parts.totalRevenue + parts.installationRevenue;
-  const outgo = parts.totalExpenses + parts.installationCost + parts.maintenanceCost;
+  /**
+   * تكلفة البضاعة المباعة تُخصم مع باقي التكاليف.
+   *
+   * كانت غائبة تمامًا: المشروع يجمع إجمالي فواتيره إيرادًا ولا يطرح ثمن ما
+   * بِيع فيها، فيظهر ربحه مساويًا لإيراده تقريبًا — فاتورة بـ160 ألفًا
+   * بضاعتها بـ110 آلاف كانت تُقرأ ربحًا كاملًا. الفاتورة نفسها تعرف
+   * تكلفتها (`invoice_items.cost_price`)، والمشروع وحده كان لا يسألها.
+   */
+  const outgo =
+    parts.totalExpenses + parts.totalCostOfGoods + parts.installationCost + parts.maintenanceCost;
   return income - outgo;
 }
 
-function fmtProject(p: any, inv: any, exp: any, quot: any) {
+function fmtProject(p: any, inv: any, exp: any, quot: any, cogs: any) {
   const installationRevenue = Number(p.installationRevenue ?? 0);
   const installationCost = Number(p.installationCost ?? 0);
   const maintenanceCost  = Number(p.maintenanceCost  ?? 0);
   const totalRevenue     = inv.totalRevenue   ?? 0;
   const totalExpenses    = exp.totalExpenses  ?? 0;
+  const totalCostOfGoods = cogs.totalCostOfGoods ?? 0;
   const totalQuotations  = quot.totalQuotations ?? 0;
-  const netProfit = projectNetProfit({ totalRevenue, installationRevenue, totalExpenses, installationCost, maintenanceCost });
+  const netProfit = projectNetProfit({ totalRevenue, installationRevenue, totalExpenses, totalCostOfGoods, installationCost, maintenanceCost });
   return {
     ...p,
     installationRevenue,
@@ -43,6 +54,7 @@ function fmtProject(p: any, inv: any, exp: any, quot: any) {
     totalRevenue,
     invoiceCount:   inv.invoiceCount   ?? 0,
     totalExpenses,
+    totalCostOfGoods,
     expenseCount:   exp.expenseCount   ?? 0,
     totalQuotations,
     quotationCount: quot.quotationCount ?? 0,
@@ -75,7 +87,7 @@ router.get("/projects", async (req, res) => {
     .leftJoin(customersTable, eq(projectsTable.customerId, customersTable.id))
     .orderBy(projectsTable.createdAt);
 
-  const [invoiceTotals, expenseTotals, quotationTotals] = await Promise.all([
+  const [invoiceTotals, expenseTotals, quotationTotals, cogsTotals] = await Promise.all([
     db.select({
       projectId: invoicesTable.projectId,
       totalRevenue: sql<number>`coalesce(sum(${invoicesTable.total}),0)`,
@@ -93,16 +105,28 @@ router.get("/projects", async (req, res) => {
       totalQuotations: sql<number>`coalesce(sum(${quotationsTable.total}),0)`,
       quotationCount: sql<number>`count(*)`,
     }).from(quotationsTable).where(sql`${quotationsTable.projectId} is not null`).groupBy(quotationsTable.projectId),
+
+    // ثمن ما بِيع في فواتير المشروع: مجموع (تكلفة الوحدة × الكمية) لكل بند.
+    db.select({
+      projectId: invoicesTable.projectId,
+      totalCostOfGoods: sql<number>`coalesce(sum(${invoiceItemsTable.costPrice} * ${invoiceItemsTable.quantity}),0)`,
+    })
+      .from(invoiceItemsTable)
+      .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
+      .where(sql`${invoicesTable.projectId} is not null`)
+      .groupBy(invoicesTable.projectId),
   ]);
 
   const invMap:  Record<number, any> = {};
   const expMap:  Record<number, any> = {};
   const quotMap: Record<number, any> = {};
+  const cogsMap: Record<number, any> = {};
   for (const r of invoiceTotals)   if (r.projectId != null) invMap[r.projectId]  = { totalRevenue:    Number(r.totalRevenue),    invoiceCount:   Number(r.invoiceCount) };
   for (const r of expenseTotals)   if (r.projectId != null) expMap[r.projectId]  = { totalExpenses:   Number(r.totalExpenses),   expenseCount:   Number(r.expenseCount) };
   for (const r of quotationTotals) if (r.projectId != null) quotMap[r.projectId] = { totalQuotations: Number(r.totalQuotations), quotationCount: Number(r.quotationCount) };
+  for (const r of cogsTotals)      if (r.projectId != null) cogsMap[r.projectId] = { totalCostOfGoods: Number(r.totalCostOfGoods) };
 
-  return res.json(projects.map((p) => fmtProject(p, invMap[p.id] ?? {}, expMap[p.id] ?? {}, quotMap[p.id] ?? {})));
+  return res.json(projects.map((p) => fmtProject(p, invMap[p.id] ?? {}, expMap[p.id] ?? {}, quotMap[p.id] ?? {}, cogsMap[p.id] ?? {})));
 });
 
 // ── GET /projects/:id ─────────────────────────────────────────────────────────
@@ -144,7 +168,18 @@ router.get("/projects/:id", async (req, res) => {
   const installationRevenue = Number(project.installationRevenue);
   const installationCost = Number(project.installationCost);
   const maintenanceCost  = Number(project.maintenanceCost);
-  const netProfit = projectNetProfit({ totalRevenue, installationRevenue, totalExpenses, installationCost, maintenanceCost });
+
+  // ثمن ما بِيع في فواتير هذا المشروع.
+  const invoiceIds = invoices.map((i) => i.id);
+  const [cogsRow] = invoiceIds.length
+    ? await db
+        .select({ total: sql<number>`coalesce(sum(${invoiceItemsTable.costPrice} * ${invoiceItemsTable.quantity}),0)` })
+        .from(invoiceItemsTable)
+        .where(inArray(invoiceItemsTable.invoiceId, invoiceIds))
+    : [];
+  const totalCostOfGoods = Number(cogsRow?.total ?? 0);
+
+  const netProfit = projectNetProfit({ totalRevenue, installationRevenue, totalExpenses, totalCostOfGoods, installationCost, maintenanceCost });
 
   return res.json({
     ...project,
@@ -153,6 +188,7 @@ router.get("/projects/:id", async (req, res) => {
     maintenanceCost,
     totalRevenue,
     totalExpenses,
+    totalCostOfGoods,
     totalQuotations,
     netProfit,
     invoiceCount:   invoices.length,

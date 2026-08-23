@@ -32,7 +32,7 @@ type Project = {
   status: "active" | "completed" | "cancelled";
   installationRevenue: number; installationCost: number; maintenanceCost: number;
   startDate?: string | null; endDate?: string | null; notes?: string | null;
-  totalRevenue: number; totalExpenses: number; netProfit: number;
+  totalRevenue: number; totalExpenses: number; totalCostOfGoods: number; netProfit: number;
   invoiceCount: number; expenseCount: number;
   totalQuotations: number; quotationCount: number;
   createdAt: string;
@@ -300,7 +300,7 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
   const linkedInvIds   = new Set(detail.invoices.map(i => i.id));
   const linkedQuotIds  = new Set(detail.quotations.map(q => q.id));
   const linkedExpIds   = new Set(detail.expenses.map(e => e.id));
-  const totalCosts  = detail.installationCost + detail.maintenanceCost + detail.totalExpenses;
+  const totalCosts  = detail.installationCost + detail.maintenanceCost + detail.totalExpenses + detail.totalCostOfGoods;
   const totalIncome = detail.totalRevenue + detail.installationRevenue;
 
   return (
@@ -352,7 +352,12 @@ function ProjectDetailPanel({ project: summary, onEdit, onClose }: {
         </div>
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 col-span-2">
           <p className="text-xs text-orange-600 mb-1">تفصيلة التكاليف</p>
-          <div className="grid grid-cols-3 gap-2 text-sm">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              {/* ثمن ما بِيع في فواتير المشروع — أكبر بند تكلفة عادةً، وكان غائبًا. */}
+              <p className="text-xs text-gray-500">تكلفة البضاعة المباعة</p>
+              <p className="font-medium text-orange-800">{cur(detail.totalCostOfGoods)}</p>
+            </div>
             <div>
               <p className="text-xs text-gray-500">مصاريف</p>
               <p className="font-medium text-orange-800">{cur(detail.totalExpenses)}</p>
@@ -691,7 +696,7 @@ export default function Projects() {
   // الدخل = الفواتير + إجمالي التركيب. التركيب يُحصَّل خارج الفاتورة أحيانًا،
   // فجمعه هنا يجعل الكارت يطابق صافي الربح بدل أن يقل عنه بلا سبب ظاهر.
   const totalRevenue = projects.reduce((s, p) => s + p.totalRevenue + p.installationRevenue, 0);
-  const totalCosts   = projects.reduce((s, p) => s + p.totalExpenses + p.installationCost + p.maintenanceCost, 0);
+  const totalCosts   = projects.reduce((s, p) => s + p.totalExpenses + p.totalCostOfGoods + p.installationCost + p.maintenanceCost, 0);
   const totalProfit  = projects.reduce((s, p) => s + p.netProfit, 0);
   const activeCount  = projects.filter(p => p.status === "active").length;
 
@@ -801,7 +806,7 @@ export default function Projects() {
                     {!selectedProject && (
                       <>
                         <TableCell className="text-green-700 font-medium text-sm">{cur(p.totalRevenue + p.installationRevenue)}</TableCell>
-                        <TableCell className="text-red-700 text-sm">{cur(p.totalExpenses + p.installationCost + p.maintenanceCost)}</TableCell>
+                        <TableCell className="text-red-700 text-sm">{cur(p.totalExpenses + p.totalCostOfGoods + p.installationCost + p.maintenanceCost)}</TableCell>
                       </>
                     )}
                     <TableCell className={`font-bold text-sm ${p.netProfit >= 0 ? "text-green-700" : "text-red-700"}`}>
