@@ -351,7 +351,8 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
       setNewCustomer({ name: "", phone: "" });
       toast({ title: `تمت إضافة "${created.name}"` });
     },
-    onError: () => toast({ title: "فشل إضافة العميل", variant: "destructive" }),
+    onError: (err: any) =>
+      toast({ title: "فشل إضافة العميل", description: err?.message, variant: "destructive" }),
   });
 
   const subtotal = items.reduce((s, i) => s + lineTotal(i), 0);
@@ -373,7 +374,8 @@ function QuotationForm({ quotation, onClose }: { quotation?: Quotation; onClose:
       queryClient.invalidateQueries({ queryKey: ["quotations"] });
       onClose();
     },
-    onError: () => toast({ title: "حدث خطأ", variant: "destructive" }),
+    onError: (err: any) =>
+      toast({ title: "تعذر حفظ العرض", description: err?.message, variant: "destructive" }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -605,7 +607,17 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
       queryClient.invalidateQueries({ queryKey: ["quotations"] });
       onClose();
     },
-    onError: () => toast({ title: "حدث خطأ أثناء التحويل", variant: "destructive" }),
+    /**
+     * سبب الرفض يأتي من الخادم كاملًا — "البنود التالية غير مرتبطة بمنتج…"
+     * مع أسماء البنود. النص الثابت كان يبتلعه، فيقف المستخدم أمام رسالة
+     * حمراء لا تقول ما العمل.
+     */
+    onError: (err: any) =>
+      toast({
+        title: "تعذر التحويل إلى فاتورة",
+        description: err?.message ?? "حاول مرة أخرى.",
+        variant: "destructive",
+      }),
   });
 
   if (isLoading || !full) return <div className="p-8 text-center">جاري التحميل...</div>;
