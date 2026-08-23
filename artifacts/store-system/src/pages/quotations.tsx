@@ -1,5 +1,5 @@
 import { jsonOrThrow } from "@/lib/http";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetInvoiceSettings } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -588,6 +588,11 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
   const [waDialog, setWaDialog] = useState(false);
   const [waPhone, setWaPhone] = useState("");
   const [convertOpen, setConvertOpen] = useState(false);
+  /**
+   * اللوحة تُفتح فوق الأزرار، ومع ذلك قد تكون النافذة ممرّرة بعيدًا عنها.
+   * بلا هذا السطر يضغط المستخدم "تحويل إلى فاتورة" فلا يرى شيئًا يحدث.
+   */
+  const convertPanelRef = useRef<HTMLDivElement>(null);
   const [convertStatus, setConvertStatus] = useState<"draft" | "paid">("draft");
   const [convertMethod, setConvertMethod] = useState("cash");
   const [convertAccount, setConvertAccount] = useState("__none__");
@@ -596,6 +601,10 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
     queryKey: ["accounts"],
     queryFn: () => fetchJSON(`${BASE}/accounts`),
   });
+
+  useEffect(() => {
+    if (convertOpen) convertPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [convertOpen]);
 
   const { data: full, isLoading } = useQuery<Quotation>({
     queryKey: ["quotations", quotation.id],
@@ -753,6 +762,75 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
         </div>
       )}
 
+      {/* لوحة داخلية لا Dialog — نافذة داخل نافذة تكسر تتبّع التركيز. */}
+      {convertOpen && full.status !== "converted" && (
+        <div ref={convertPanelRef} className="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-3">
+          <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
+            <FileCheck className="h-4 w-4" />
+            تحويل {full.quotationNumber} إلى فاتورة
+          </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { value: "draft", label: "مسودة", hint: "تُراجَع وتُقبض لاحقًا" },
+              { value: "paid", label: "مدفوعة", hint: "تمّت — الخزنة تتحرك الآن" },
+            ] as const).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setConvertStatus(opt.value)}
+                className={`rounded-lg border p-3 text-right transition-colors ${
+                  convertStatus === opt.value
+                    ? "border-blue-500 bg-white ring-1 ring-blue-500"
+                    : "border-blue-200 bg-white/60 hover:bg-white"
+                }`}
+              >
+                <span className="block text-sm font-medium">{opt.label}</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+
+          {convertStatus === "paid" && (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">طريقة الدفع</Label>
+                <Select value={convertMethod} onValueChange={setConvertMethod}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHODS.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">الخزنة</Label>
+                <Select value={convertAccount} onValueChange={setConvertAccount}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="اختر خزنة..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— بدون خزنة —</SelectItem>
+                    {accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            البنود غير الموجودة في المنتجات تُضاف تلقائيًا تحت "غير مصنف" بسعر العرض وبتكلفة
+            فارغة — راجعها بعد التحويل. والمخزون يُخصم في الحالتين: "مسودة" تعني أن النقود لم
+            تُقبض، لا أن البضاعة لم تخرج.
+          </p>
+
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" size="sm" onClick={() => setConvertOpen(false)}>إلغاء</Button>
+            <Button size="sm" className="bg-green-600 hover:bg-green-700"
+              onClick={() => convertMutation.mutate()} disabled={convertMutation.isPending}>
+              {convertMutation.isPending ? "جاري التحويل..." : "تأكيد التحويل"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center pt-3 border-t flex-wrap gap-2">
         <div className="flex gap-2 flex-wrap">
           {full.status !== "converted" && (
@@ -838,75 +916,6 @@ export function QuotationDetail({ quotation, onEdit, onClose }: { quotation: Quo
           </Button>
         </div>
       </div>
-
-      {/* لوحة داخلية لا Dialog — نافذة داخل نافذة تكسر تتبّع التركيز. */}
-      {convertOpen && full.status !== "converted" && (
-        <div className="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-3">
-          <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
-            <FileCheck className="h-4 w-4" />
-            تحويل {full.quotationNumber} إلى فاتورة
-          </p>
-
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              { value: "draft", label: "مسودة", hint: "تُراجَع وتُقبض لاحقًا" },
-              { value: "paid", label: "مدفوعة", hint: "تمّت — الخزنة تتحرك الآن" },
-            ] as const).map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setConvertStatus(opt.value)}
-                className={`rounded-lg border p-3 text-right transition-colors ${
-                  convertStatus === opt.value
-                    ? "border-blue-500 bg-white ring-1 ring-blue-500"
-                    : "border-blue-200 bg-white/60 hover:bg-white"
-                }`}
-              >
-                <span className="block text-sm font-medium">{opt.label}</span>
-                <span className="block text-xs text-muted-foreground mt-0.5">{opt.hint}</span>
-              </button>
-            ))}
-          </div>
-
-          {convertStatus === "paid" && (
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs">طريقة الدفع</Label>
-                <Select value={convertMethod} onValueChange={setConvertMethod}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_METHODS.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">الخزنة</Label>
-                <Select value={convertAccount} onValueChange={setConvertAccount}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder="اختر خزنة..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— بدون خزنة —</SelectItem>
-                    {accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            البنود غير الموجودة في المنتجات تُضاف تلقائيًا تحت "غير مصنف" بسعر العرض وبتكلفة
-            فارغة — راجعها بعد التحويل. والمخزون يُخصم في الحالتين: "مسودة" تعني أن النقود لم
-            تُقبض، لا أن البضاعة لم تخرج.
-          </p>
-
-          <div className="flex gap-2 justify-end">
-            <Button variant="ghost" size="sm" onClick={() => setConvertOpen(false)}>إلغاء</Button>
-            <Button size="sm" className="bg-green-600 hover:bg-green-700"
-              onClick={() => convertMutation.mutate()} disabled={convertMutation.isPending}>
-              {convertMutation.isPending ? "جاري التحويل..." : "تأكيد التحويل"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* WhatsApp inline panel — avoids nested-dialog focus trap */}
       {waDialog && (
