@@ -293,7 +293,9 @@ router.patch("/invoices/:id", async (req, res) => {
         // بندٌ بلا منتج (خدمة، أو صنف خارج الكتالوج) لم يخصم مخزونًا عند
         // البيع، فلا شيء يُرد إليه عند الإلغاء.
         if (item.productId == null) continue;
-        await db.update(productsTable).set({ stock: sql`${productsTable.stock} + ${item.quantity}` }).where(eq(productsTable.id, item.productId));
+        // `Number`: الكمية تعود من القاعدة نصًا ("2.000")، وPostgres يرفض
+        // تحويله إلى integer في `stock + $1` — فكان إلغاء أي فاتورة يفشل.
+        await db.update(productsTable).set({ stock: sql`${productsTable.stock} + ${Number(item.quantity)}` }).where(eq(productsTable.id, item.productId));
       }
       await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`));
     }

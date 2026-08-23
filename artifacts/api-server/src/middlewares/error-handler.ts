@@ -52,9 +52,31 @@ const PG_ERRORS: Record<string, { status: number; code: string; message: string 
  */
 const SCHEMA_DRIFT = new Set(["42703", "42P01", "42883"]);
 
-function pgCodeOf(error: unknown): string | undefined {
-  const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" ? code : undefined;
+/**
+ * خطأ Postgres الحقيقي من تحت غلافه.
+ *
+ * Drizzle يلفّ كل خطأ استعلام في `DrizzleQueryError` ويضع الأصلي في
+ * `cause`. فقراءة `err.code` من الغلاف تعطي `undefined` دائمًا، وكل عطل
+ * قاعدة بيانات — مكرر، مرجع مفقود، نوع غير صالح — كان يخرج للمستخدم
+ * كـ"خطأ غير متوقع" بينما القاعدة قالت سببه بالحرف.
+ *
+ * النزول في السلسلة لا في الغلاف وحده، وبسقف يمنع أي حلقة.
+ */
+type PgErrorish = {
+  code?: string;
+  constraint?: string;
+  table?: string;
+  column?: string;
+  detail?: string;
+};
+
+function pgErrorOf(error: unknown): PgErrorish | undefined {
+  let current: any = error;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (typeof current.code === "string") return current as PgErrorish;
+    current = current.cause;
+  }
+  return undefined;
 }
 
 /** مسار /api غير معروف يرد JSON، لا صفحة HTML ولا صفحة الواجهة. */
@@ -74,7 +96,8 @@ export const apiErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
 
   const requestId = String((req as { id?: unknown }).id ?? "");
-  const pgCode = pgCodeOf(err);
+  const pg = pgErrorOf(err);
+  const pgCode = pg?.code;
   const known = pgCode ? PG_ERRORS[pgCode] : undefined;
 
   // أخطاء express.json قبل وصول الطلب إلى أي راوت.
@@ -97,10 +120,10 @@ export const apiErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
     method: req.method,
     url: req.originalUrl.split("?")[0],
     pgCode,
-    constraint: (err as { constraint?: string } | null)?.constraint,
-    table: (err as { table?: string } | null)?.table,
-    column: (err as { column?: string } | null)?.column,
-    detail: (err as { detail?: string } | null)?.detail,
+    constraint: pg?.constraint,
+    table: pg?.table,
+    column: pg?.column,
+    detail: pg?.detail,
   };
 
   if (known) {
@@ -130,6 +153,9 @@ export const apiErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
   res.status(500).json({
     error: "خطأ غير متوقع في الخادم. اذكر رقم الطلب عند الإبلاغ.",
     code: "INTERNAL",
+    // رمز SQLSTATE ليس بيانات مستخدم، وهو أسرع طريق للتشخيص حين لا يكون
+    // السجل في متناول من يرى الشاشة.
+    dbCode: pgCode,
     requestId,
   });
 };

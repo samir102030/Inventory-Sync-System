@@ -585,7 +585,9 @@ router.post("/quotations/:id/convert", async (req, res) => {
   for (const l of lines) {
     await db
       .update(productsTable)
-      .set({ stock: sql`${productsTable.stock} - ${l.quantity}` })
+      // `Number` لا النص الخام: العمود `numeric(10,3)` يعود من القاعدة
+      // "32.000"، وPostgres يحاول تحويله إلى integer في `stock - $1` فيرفضه.
+      .set({ stock: sql`${productsTable.stock} - ${Number(l.quantity)}` })
       .where(eq(productsTable.id, l.productId));
   }
 
