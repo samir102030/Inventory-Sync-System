@@ -268,6 +268,31 @@ router.put("/quotations/:id", async (req, res) => {
   const id = Number(req.params.id);
   const { customerId, customerName, items = [], discount = 0, tax, notes, validUntil, status } = req.body;
 
+  /**
+   * العرض المحوَّل لا يُعدَّل، وحالته لا تُمحى.
+   *
+   * كان هذا المسار يكتب `status: status || "draft"` وفورم التعديل لا يرسل
+   * `status` إطلاقًا، فكل تعديل يُنزل العرض إلى `draft` — بما فيه عرضٌ
+   * حُوِّل إلى فاتورة. وذلك يعيد تسليح حارس التحويل، فيُحوَّل العرض مرة
+   * أخرى: فاتورة مكررة، ومخزون يُخصم مرتين لبيعة واحدة. الطريق إليه ضغطتان
+   * من القائمة.
+   *
+   * الرفض قبل أي كتابة عمدًا: الرد المقصود بـ 4xx لا يُرجع معاملة الطلب.
+   */
+  const [existing] = await db
+    .select({ status: quotationsTable.status })
+    .from(quotationsTable)
+    .where(eq(quotationsTable.id, id));
+
+  if (!existing) return res.status(404).json({ error: "العرض غير موجود." });
+
+  if (existing.status === "converted") {
+    return res.status(409).json({
+      error: "لا يمكن تعديل عرض حُوِّل إلى فاتورة. عدّل الفاتورة نفسها، أو أنشئ عرضًا جديدًا.",
+      code: "ALREADY_CONVERTED",
+    });
+  }
+
   const priced = await priceQuotation(items, discount, tax);
 
   const [updated] = await db.update(quotationsTable).set({
@@ -277,7 +302,8 @@ router.put("/quotations/:id", async (req, res) => {
     discount: String(priced.discountAmount),
     tax: String(priced.taxAmount),
     total: String(priced.total),
-    status: status || "draft",
+    // ?? لا || : الحالة تبقى كما هي حين لا يرسلها المُعدِّل، ولا ترجع إلى المسودة.
+    status: status ?? existing.status,
     notes: notes || null,
     validUntil: validUntil || null,
   }).where(eq(quotationsTable.id, id)).returning();
@@ -302,11 +328,43 @@ router.put("/quotations/:id", async (req, res) => {
   return res.json({ ...formatQuotation(updated), items: priced.lines });
 });
 
+/**
+ * الحالات التي يجوز لأحد أن يكتبها.
+ *
+ * `converted` غائبة عمدًا: لا تُكتب إلا من مسار التحويل ومعها فاتورة. وبدون
+ * هذه القائمة كان المسار يكتب أي نص يصل إليه — فيُعاد عرضٌ محوَّل إلى
+ * `accepted` ثم يُحوَّل ثانية (فاتورة مكررة ومخزون مخصوم مرتين)، أو تُكتب
+ * `converted` بالإيد بلا فاتورة خلفها فيختفي زر التحويل عن العرض إلى الأبد.
+ */
+const QUOTATION_STATUSES = new Set(["draft", "sent", "accepted", "rejected", "expired"]);
+
 router.patch("/quotations/:id/status", async (req, res) => {
   const id = Number(req.params.id);
   const { status } = req.body;
-  const [updated] = await db.update(quotationsTable).set({ status }).where(eq(quotationsTable.id, id)).returning();
-  if (!updated) return res.status(404).json({ error: "not found" });
+
+  if (!QUOTATION_STATUSES.has(status)) {
+    return res.status(400).json({ error: "حالة غير معروفة لعرض السعر.", code: "BAD_STATUS" });
+  }
+
+  // التحديث المشروط: العرض المحوَّل لا تتغير حالته مهما كان الطالب.
+  const [updated] = await db
+    .update(quotationsTable)
+    .set({ status })
+    .where(and(eq(quotationsTable.id, id), ne(quotationsTable.status, "converted")))
+    .returning();
+
+  if (!updated) {
+    const [exists] = await db
+      .select({ id: quotationsTable.id })
+      .from(quotationsTable)
+      .where(eq(quotationsTable.id, id));
+    if (!exists) return res.status(404).json({ error: "العرض غير موجود." });
+    return res.status(409).json({
+      error: "لا يمكن تغيير حالة عرض حُوِّل إلى فاتورة.",
+      code: "ALREADY_CONVERTED",
+    });
+  }
+
   return res.json(formatQuotation(updated));
 });
 

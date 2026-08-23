@@ -1080,10 +1080,13 @@ export default function Quotations() {
                           onClick={() => { setSelectedId(q.id); setDialogMode("view"); }}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8"
-                          onClick={() => { setSelectedId(q.id); setDialogMode("edit"); }}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        {/* العرض المحوَّل لا يُعدَّل — الخادم يرفضه، وإخفاء الزر يوفّر الرفض. */}
+                        {q.status !== "converted" && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8"
+                            onClick={() => { setSelectedId(q.id); setDialogMode("edit"); }}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"
                           onClick={() => handleDelete(q.id)}>
                           <Trash2 className="h-4 w-4" />
