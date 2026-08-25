@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Printer, Eye, Edit, RotateCcw, MessageCircle, Download } from "lucide-react";
+import { Search, Printer, Eye, Edit, RotateCcw, MessageCircle, Download, Plus, Trash2 } from "lucide-react";
 import { exportToExcel } from "@/lib/excel";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -68,11 +68,46 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge className={s.color}>{s.label}</Badge>;
 }
 
+type EditLine = {
+  key: string;
+  id?: number;
+  productId: string;
+  productName: string;
+  quantity: string;
+  unitPrice: string;
+  discount: string;
+};
+
+type PickerProduct = { id: number; name: string; price: number; costPrice: number | null; stock: number };
+
+let lineKeySeq = 0;
+const nextLineKey = () => `line-${++lineKeySeq}`;
+
+/**
+ * تعديل الفاتورة — بنودها وحالتها معًا.
+ *
+ * كانت النافذة ترسل خمسة حقول فقط ولا تمس البنود، فمن أراد تصحيح كمية أو
+ * صنفًا لم يجد إلا أن يلغي الفاتورة ويكتبها من جديد برقم آخر. البنود هنا
+ * الآن، والخادم يعيد حساب المجموع والمخزون والخزنة من حال الفاتورة بعد
+ * التعديل لا من فرقٍ يحسبه هذا الملف.
+ */
 function EditInvoiceDialog({ invoiceId, onClose }: { invoiceId: number; onClose: () => void }) {
   const { data: invoice } = useGetInvoice(invoiceId);
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [form, setForm] = useState<{ paymentMethod: string; discount: string; tax: string; notes: string; status: string } | null>(null);
+  const [form, setForm] = useState<{
+    paymentMethod: string;
+    discount: string;
+    tax: string;
+    notes: string;
+    status: string;
+    items: EditLine[];
+  } | null>(null);
+
+  const { data: products = [] } = useQuery<PickerProduct[]>({
+    queryKey: ["products"],
+    queryFn: () => fetchJSON(`${BASE}/products`),
+  });
 
   if (invoice && !form) {
     setForm({
@@ -81,6 +116,15 @@ function EditInvoiceDialog({ invoiceId, onClose }: { invoiceId: number; onClose:
       tax: String(invoice.tax ?? 0),
       notes: invoice.notes ?? "",
       status: invoice.status,
+      items: ((invoice as any).items ?? []).map((i: any) => ({
+        key: nextLineKey(),
+        id: i.id,
+        productId: i.productId != null ? String(i.productId) : "",
+        productName: i.productName ?? "",
+        quantity: String(i.quantity ?? 1),
+        unitPrice: String(i.unitPrice ?? 0),
+        discount: String(i.discount ?? 0),
+      })),
     });
   }
 
@@ -92,22 +136,103 @@ function EditInvoiceDialog({ invoiceId, onClose }: { invoiceId: number; onClose:
       toast({ title: "تم تحديث الفاتورة" });
       qc.invalidateQueries({ queryKey: getGetInvoicesQueryKey({}) });
       qc.invalidateQueries({ queryKey: ["invoice", invoiceId] });
+      // البنود تحرّك المخزون والخزنة، فقوائمهما لم تعد صحيحة.
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
       onClose();
     },
-    onError: () => toast({ title: "حدث خطأ", variant: "destructive" }),
+    onError: (err: any) =>
+      toast({ title: "تعذر حفظ التعديلات", description: err?.message, variant: "destructive" }),
   });
 
   if (!invoice || !form) return null;
-  const isCancelled = invoice.status === "cancelled";
+
+  const wasCancelled = invoice.status === "cancelled";
+  const num = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+  const setLine = (key: string, patch: Partial<EditLine>) =>
+    setForm({ ...form, items: form.items.map((l) => (l.key === key ? { ...l, ...patch } : l)) });
+
+  const addLine = () =>
+    setForm({
+      ...form,
+      items: [...form.items, { key: nextLineKey(), productId: "", productName: "", quantity: "1", unitPrice: "0", discount: "0" }],
+    });
+
+  const removeLine = (key: string) =>
+    setForm({ ...form, items: form.items.filter((l) => l.key !== key) });
+
+  const pickProduct = (key: string, value: string) => {
+    const product = products.find((p) => String(p.id) === value);
+    setForm({
+      ...form,
+      items: form.items.map((l) =>
+        l.key === key
+          ? {
+              ...l,
+              productId: value === "__none__" ? "" : value,
+              productName: product ? product.name : l.productName,
+              unitPrice: product && num(l.unitPrice) === 0 ? String(product.price) : l.unitPrice,
+            }
+          : l,
+      ),
+    });
+  };
+
+  const lineTotal = (l: EditLine) => num(l.quantity) * num(l.unitPrice) - num(l.discount);
+  const subtotal = form.items.reduce((sum, l) => sum + lineTotal(l), 0);
+  const newTotal = subtotal - num(form.discount) + num(form.tax);
+
+  /** النسبة التي كانت عليها الفاتورة، محمولةً على المجموع الجديد. */
+  const priorRate = Number(invoice.subtotal) > 0 ? Number(invoice.tax) / Number(invoice.subtotal) : 0;
+  const suggestedTax = Math.round(subtotal * priorRate * 100) / 100;
+  const taxDrifted = priorRate > 0 && Math.abs(suggestedTax - num(form.tax)) > 0.01;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    update.mutate({ paymentMethod: form.paymentMethod, discount: parseFloat(form.discount || "0"), tax: parseFloat(form.tax || "0"), notes: form.notes, status: form.status });
+    if (form.items.length === 0) {
+      toast({ title: "الفاتورة لا تكون بلا بنود", variant: "destructive" });
+      return;
+    }
+    for (const l of form.items) {
+      if (!l.productId && !l.productName.trim()) {
+        toast({ title: "بندٌ بلا اسم ولا منتج", variant: "destructive" });
+        return;
+      }
+      if (num(l.quantity) <= 0) {
+        toast({ title: `كمية غير صالحة في "${l.productName || "بند"}"`, variant: "destructive" });
+        return;
+      }
+    }
+    update.mutate({
+      paymentMethod: form.paymentMethod,
+      discount: num(form.discount),
+      tax: num(form.tax),
+      notes: form.notes,
+      status: form.status,
+      items: form.items.map((l) => ({
+        id: l.id,
+        productId: l.productId ? Number(l.productId) : null,
+        productName: l.productName,
+        quantity: num(l.quantity),
+        unitPrice: num(l.unitPrice),
+        discount: num(l.discount),
+      })),
+    });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-      {isCancelled && <div className="bg-destructive/10 text-destructive text-sm rounded-md p-3">هذه الفاتورة ملغاة — لا يمكن تعديل بعض البيانات</div>}
+      {wasCancelled && form.status !== "cancelled" && (
+        <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-md p-3">
+          إعادة تفعيل فاتورة ملغاة — سيُخصم المخزون من جديد وتعود حركة الخزنة.
+        </div>
+      )}
+      {!wasCancelled && form.status === "cancelled" && (
+        <div className="bg-destructive/10 text-destructive text-sm rounded-md p-3">
+          إلغاء الفاتورة — سيعود المخزون وتُزال حركة الخزنة.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -131,6 +256,62 @@ function EditInvoiceDialog({ invoiceId, onClose }: { invoiceId: number; onClose:
         </div>
       </div>
 
+      {/* ── البنود ── */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>الأصناف ({form.items.length})</Label>
+          <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={addLine}>
+            <Plus className="h-3 w-3" /> إضافة صنف
+          </Button>
+        </div>
+
+        <div className="space-y-2 max-h-64 overflow-y-auto rounded-md border p-2">
+          {form.items.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-4">لا توجد بنود — أضف صنفًا واحدًا على الأقل.</p>
+          )}
+          {form.items.map((l) => (
+            <div key={l.key} className="grid grid-cols-12 gap-1.5 items-end">
+              <div className="col-span-5 space-y-1">
+                <Select value={l.productId || "__none__"} onValueChange={(v) => pickProduct(l.key, v)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اختر صنفًا..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— بند بلا منتج —</SelectItem>
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!l.productId && (
+                  <Input className="h-8 text-xs" placeholder="اسم البند" value={l.productName}
+                    onChange={(e) => setLine(l.key, { productName: e.target.value })} />
+                )}
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-[10px] text-muted-foreground">الكمية</Label>
+                <Input className="h-8 text-xs" type="number" min="0" step="0.001" value={l.quantity}
+                  onChange={(e) => setLine(l.key, { quantity: e.target.value })} />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-[10px] text-muted-foreground">السعر</Label>
+                <Input className="h-8 text-xs" type="number" min="0" step="0.01" value={l.unitPrice}
+                  onChange={(e) => setLine(l.key, { unitPrice: e.target.value })} />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-[10px] text-muted-foreground">خصم</Label>
+                <Input className="h-8 text-xs" type="number" min="0" step="0.01" value={l.discount}
+                  onChange={(e) => setLine(l.key, { discount: e.target.value })} />
+              </div>
+              <div className="col-span-1">
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                  onClick={() => removeLine(l.key)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>الخصم (ج.م)</Label>
@@ -139,27 +320,35 @@ function EditInvoiceDialog({ invoiceId, onClose }: { invoiceId: number; onClose:
         <div className="space-y-2">
           <Label>الضريبة (ج.م)</Label>
           <Input type="number" min="0" step="0.01" value={form.tax} onChange={e => setForm({ ...form, tax: e.target.value })} />
+          {taxDrifted && (
+            <button type="button" className="text-[11px] text-blue-700 hover:underline"
+              onClick={() => setForm({ ...form, tax: String(suggestedTax) })}>
+              بنفس نسبة الفاتورة السابقة: {suggestedTax.toFixed(2)} ج.م — تطبيق
+            </button>
+          )}
         </div>
       </div>
 
       <div className="space-y-2">
         <Label>ملاحظات</Label>
-        <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={3} />
+        <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} />
       </div>
 
       <div className="bg-muted/50 rounded p-3 text-sm space-y-1">
-        <div className="flex justify-between"><span>المجموع الفرعي:</span><span>{invoice.subtotal?.toFixed(2)} ج.م</span></div>
-        <div className="flex justify-between text-destructive"><span>الخصم:</span><span>-{parseFloat(form.discount || "0").toFixed(2)} ج.م</span></div>
-        <div className="flex justify-between"><span>الضريبة:</span><span>+{parseFloat(form.tax || "0").toFixed(2)} ج.م</span></div>
+        <div className="flex justify-between"><span>المجموع الفرعي:</span><span>{subtotal.toFixed(2)} ج.م</span></div>
+        <div className="flex justify-between text-destructive"><span>الخصم:</span><span>-{num(form.discount).toFixed(2)} ج.م</span></div>
+        <div className="flex justify-between"><span>الضريبة:</span><span>+{num(form.tax).toFixed(2)} ج.م</span></div>
         <div className="flex justify-between font-bold border-t pt-1 mt-1">
           <span>الإجمالي الجديد:</span>
-          <span>{(Number(invoice.subtotal) - parseFloat(form.discount || "0") + parseFloat(form.tax || "0")).toFixed(2)} ج.م</span>
+          <span>{newTotal.toFixed(2)} ج.م</span>
         </div>
       </div>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose}>إلغاء</Button>
-        <Button type="submit" disabled={update.isPending}>حفظ التعديلات</Button>
+        <Button type="submit" disabled={update.isPending}>
+          {update.isPending ? "جاري الحفظ..." : "حفظ التعديلات"}
+        </Button>
       </div>
     </form>
   );

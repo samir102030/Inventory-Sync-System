@@ -261,69 +261,292 @@ router.get("/invoices/:id", async (req, res) => {
   return res.json({ ...formatInvoice(rows[0], rows[0].customerName, rows[0].customerWhatsapp), items });
 });
 
-router.patch("/invoices/:id", async (req, res) => {
-  const { status, notes, discount, tax, paymentMethod, customerId, accountId } = req.body;
+/**
+ * ما تمسكه الفاتورة من كل منتج الآن.
+ *
+ * لا "ما بِيع فيها" ولا "ما حدث لها": كم قطعةً من كل صنف ما زالت خارج
+ * الرصيد بسببها في هذه اللحظة. الملغاة تمسك صفرًا، وما أُرجع منها عاد
+ * فلا يُحسب، والسطر بلا منتج لا مخزون له.
+ *
+ * هذه الدالة هي كل ما تحتاجه الحركة: يكفي حساب المسكة قبل التعديل وبعده
+ * وتحريك الفرق. الإلغاء والإرجاع من الإلغاء وتعديل الكميات وحذف سطر —
+ * كلها حالة واحدة من هذه القاعدة، بدل فرعٍ لكل حدث يُنسى أحدها فيه.
+ */
+function invoiceFootprint(
+  lines: Array<{ productId: number | null; quantity: number }>,
+  returnedByProductId: Map<number, number>,
+  status: string,
+): Map<number, number> {
+  const held = new Map<number, number>();
+  if (status === "cancelled") return held;
 
-  const invRows = await db.select().from(invoicesTable).where(eq(invoicesTable.id, Number(req.params.id))).limit(1);
-  if (!invRows[0]) return res.status(404).json({ error: "Not found" });
+  for (const line of lines) {
+    if (line.productId == null) continue;
+    held.set(line.productId, (held.get(line.productId) ?? 0) + line.quantity);
+  }
+  for (const [productId, qty] of returnedByProductId) {
+    if (!held.has(productId)) continue;
+    held.set(productId, held.get(productId)! - qty);
+  }
+  for (const [productId, qty] of held) {
+    if (qty <= 0) held.delete(productId);
+  }
+  return held;
+}
+
+/**
+ * حركات الخزنة تُبنى من حال الفاتورة الآن، لا تُرقَّع بما جرى لها.
+ *
+ * ثلاثة أعطال كانت في الترقيع: الإلغاء يمحو حركة الدخول ويترك حركات
+ * المرتجع خارجةً — فالخزنة تخسر قيمة الرد بلا بيعةٍ تقابلها؛ ونزول الحالة
+ * من "مدفوعة" إلى "مسودة" يترك الدخول قائمًا فتظل الخزنة تعدّ نقدًا لفاتورة
+ * لم تُقبض؛ وإحياء فاتورة قديمة كان يؤرّخ دخلها باليوم، فيقع في شهرٍ
+ * والتقارير تقرؤه في شهر آخر لأنها تؤرّخ بتاريخ إنشاء الفاتورة.
+ *
+ * البناء من جديد يجعل الحالات الثلاث حالةً واحدة، والتواريخ تبقى تواريخها.
+ */
+async function reconcileInvoiceLedger(inv: {
+  id: number;
+  invoiceNumber: string;
+  accountId: number | null;
+  paymentMethod: string;
+  status: string;
+  createdAt: Date | string;
+  total: number;
+}) {
+  const returns = await db.select().from(invoiceReturnsTable).where(eq(invoiceReturnsTable.invoiceId, inv.id));
+
+  await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`));
+  for (const ret of returns) {
+    await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice-return:${ret.id}`));
+  }
+
+  if (inv.status === "cancelled") return;
+  if (!inv.accountId || inv.paymentMethod === "credit") return;
+
+  // النقد يدخل حين تُقبض الفاتورة. المسودة لم تُقبض بعد.
+  const cashReceived = inv.status === "paid" || inv.status === "partial_return" || inv.status === "returned";
+  if (!cashReceived) return;
+
+  const asDate = (value: Date | string) =>
+    (value instanceof Date ? value.toISOString() : String(value)).slice(0, 10);
+
+  if (inv.total > 0) {
+    await db.insert(accountTransactionsTable).values({
+      accountId: inv.accountId,
+      direction: "in",
+      amount: String(inv.total),
+      description: `فاتورة مبيعات رقم ${inv.invoiceNumber}`,
+      category: "مبيعات",
+      date: asDate(inv.createdAt),
+      reference: `invoice:${inv.id}`,
+    });
+  }
+
+  for (const ret of returns) {
+    if (Number(ret.total) <= 0) continue;
+    await db.insert(accountTransactionsTable).values({
+      accountId: inv.accountId,
+      direction: "out",
+      amount: String(Number(ret.total)),
+      description: `مرتجع فاتورة رقم ${inv.invoiceNumber} (${ret.returnNumber})`,
+      category: "مرتجعات",
+      date: asDate(ret.createdAt),
+      reference: `invoice-return:${ret.id}`,
+    });
+  }
+}
+
+/**
+ * تعديل فاتورة — بنودها وحالتها وكل ما فيها.
+ *
+ * لا حالة تُمنع: الملغاة تُعدَّل وتُحيا، والمدفوعة يُعاد كتابة بنودها. ما
+ * كان يمنع ذلك ليس قاعدةً محاسبية بل غياب الحساب: كان المسار لا يمس
+ * البنود إطلاقًا، ولا يعيد حساب المجموع الفرعي، ويحرّك المخزون بفرعٍ واحد
+ * للإلغاء بلا عكسٍ له.
+ *
+ * ⚠️ الترتيب مقصود: كل تحقق يسبق كل كتابة. الرد المقصود بـ 4xx لا يُرجع
+ * معاملة الطلب، فما يُكتب قبله يبقى.
+ */
+router.patch("/invoices/:id", async (req, res) => {
+  const { status, notes, discount, tax, paymentMethod, customerId, accountId, items } = req.body;
+  const id = Number(req.params.id);
+
+  const invRows = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
+  if (!invRows[0]) return res.status(404).json({ error: "الفاتورة غير موجودة." });
   const inv = invRows[0];
 
-  const updates: Record<string, any> = {};
-  if (notes !== undefined) updates.notes = notes;
-  if (paymentMethod !== undefined) updates.paymentMethod = paymentMethod;
-  if (customerId !== undefined) updates.customerId = customerId ? Number(customerId) : null;
-  if (accountId !== undefined) updates.accountId = accountId ? Number(accountId) : null;
+  const oldRows = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, id));
+  const returned = await returnedByProduct(id);
 
-  const newDiscount = discount !== undefined ? Number(discount) : Number(inv.discount);
-  const newTax = tax !== undefined ? Number(tax) : Number(inv.tax);
-  if (discount !== undefined) updates.discount = String(newDiscount);
-  if (tax !== undefined) updates.tax = String(newTax);
+  type ResolvedLine = {
+    productId: number | null;
+    productName: string;
+    barcode: string | null;
+    quantity: number;
+    unitPrice: number;
+    costPrice: string;
+    discount: number;
+    total: number;
+  };
 
-  let newTotal = Number(inv.total);
-  if (discount !== undefined || tax !== undefined) {
-    newTotal = Number(inv.subtotal) - newDiscount + newTax;
-    updates.total = String(newTotal);
-  }
+  const oldLines: ResolvedLine[] = oldRows.map((r) => ({
+    productId: r.productId,
+    productName: r.productName,
+    barcode: r.barcode ?? null,
+    quantity: Number(r.quantity),
+    unitPrice: Number(r.unitPrice),
+    costPrice: String(r.costPrice ?? 0),
+    discount: Number(r.discount ?? 0),
+    total: Number(r.total),
+  }));
 
-  if (status !== undefined && status !== inv.status) {
-    updates.status = status;
-    if (status === "cancelled" && inv.status !== "cancelled") {
-      const items = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
-      for (const item of items) {
-        // بندٌ بلا منتج (خدمة، أو صنف خارج الكتالوج) لم يخصم مخزونًا عند
-        // البيع، فلا شيء يُرد إليه عند الإلغاء.
-        if (item.productId == null) continue;
-        // `Number`: الكمية تعود من القاعدة نصًا ("2.000")، وPostgres يرفض
-        // تحويله إلى integer في `stock + $1` — فكان إلغاء أي فاتورة يفشل.
-        await db.update(productsTable).set({ stock: sql`${productsTable.stock} + ${Number(item.quantity)}` }).where(eq(productsTable.id, item.productId));
-      }
-      await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`));
+  // ── تحقق: البنود الواردة، بلا كتابة ──────────────────────────────────────
+  let newLines: ResolvedLine[] | null = null;
+
+  if (items !== undefined) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "الفاتورة لا تكون بلا بنود.", code: "EMPTY_INVOICE" });
     }
-  }
 
-  const [updated] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, Number(req.params.id))).returning();
+    newLines = [];
+    for (const raw of items) {
+      const quantity = Number(raw?.quantity);
+      const unitPrice = Number(raw?.unitPrice);
+      const lineDiscount = Number(raw?.discount ?? 0) || 0;
 
-  if (updated.status === "paid" || updated.status === "partial_return") {
-    const finalAccountId = updated.accountId;
-    if (finalAccountId && updated.paymentMethod !== "credit") {
-      const existingTxn = await db.select().from(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`)).limit(1);
-      if (existingTxn[0]) {
-        await db.update(accountTransactionsTable).set({ accountId: finalAccountId, amount: String(newTotal) }).where(eq(accountTransactionsTable.id, existingTxn[0].id));
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return res.status(400).json({ error: `كمية غير صالحة في البند "${raw?.productName ?? ""}".`, code: "BAD_QUANTITY" });
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        return res.status(400).json({ error: `سعر غير صالح في البند "${raw?.productName ?? ""}".`, code: "BAD_PRICE" });
+      }
+
+      const productId = raw?.productId != null && raw.productId !== "" ? Number(raw.productId) : null;
+      const existing = raw?.id != null ? oldRows.find((o) => o.id === Number(raw.id)) : undefined;
+
+      let productName = String(raw?.productName ?? "").trim();
+      let barcode: string | null = null;
+      /**
+       * سعر التكلفة لقطة وقت البيع لا سعر اليوم: السطر القائم يحتفظ بتكلفته
+       * الأصلية ما دام منتجه هو هو، والسطر الجديد يأخذ تكلفة منتجه الآن.
+       * غير ذلك يُعاد كتابة ربح فواتير قديمة كلما تغيّرت تكلفة صنف.
+       */
+      let costPrice = "0";
+
+      if (productId != null) {
+        const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
+        if (!product) {
+          return res.status(400).json({ error: `المنتج المختار في البند "${productName}" غير موجود.`, code: "PRODUCT_GONE" });
+        }
+        productName = productName || product.name;
+        barcode = product.barcode ?? null;
+        costPrice = existing && existing.productId === productId ? String(existing.costPrice ?? 0) : String(product.costPrice ?? 0);
       } else {
-        await db.insert(accountTransactionsTable).values({
-          accountId: finalAccountId,
-          direction: "in",
-          amount: String(newTotal),
-          description: `فاتورة مبيعات رقم ${updated.invoiceNumber}`,
-          category: "مبيعات",
-          date: new Date().toISOString().slice(0, 10),
-          reference: `invoice:${inv.id}`,
-        });
+        if (!productName) {
+          return res.status(400).json({ error: "بندٌ بلا اسم ولا منتج.", code: "BAD_LINE" });
+        }
+        costPrice = existing ? String(existing.costPrice ?? 0) : "0";
       }
-    } else if (updated.paymentMethod === "credit") {
-      await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${inv.id}`));
+
+      newLines.push({
+        productId,
+        productName,
+        barcode,
+        quantity,
+        unitPrice,
+        costPrice,
+        discount: lineDiscount,
+        total: quantity * unitPrice - lineDiscount,
+      });
     }
   }
+
+  const effectiveLines = newLines ?? oldLines;
+  const newStatus = status !== undefined ? String(status) : inv.status;
+  const finalPaymentMethod = paymentMethod !== undefined ? String(paymentMethod) : inv.paymentMethod;
+  const finalAccountId =
+    accountId !== undefined ? (accountId ? Number(accountId) : null) : inv.accountId;
+
+  // ── المال: المجموع الفرعي من البنود دائمًا، لا من الصف المحفوظ ───────────
+  const newSubtotal = effectiveLines.reduce((sum, l) => sum + l.total, 0);
+  const newDiscount = discount !== undefined ? Number(discount) : Number(inv.discount);
+
+  /**
+   * الضريبة مبلغ لا نسبة في هذا المخطط. فإن تغيّرت البنود ولم يرسل المُعدِّل
+   * مبلغًا، حملنا النسبة السابقة على المجموع الجديد — تركُ المبلغ كما هو
+   * يغيّر النسبة ضمنًا وبصمت، وهو أسوأ الاحتمالات في إقرار ضريبي.
+   */
+  const priorRate = Number(inv.subtotal) > 0 ? Number(inv.tax) / Number(inv.subtotal) : 0;
+  const newTax =
+    tax !== undefined
+      ? Number(tax)
+      : newLines
+        ? Math.round(newSubtotal * priorRate * 100) / 100
+        : Number(inv.tax);
+
+  const newTotal = newSubtotal - newDiscount + newTax;
+
+  // ── المخزون: فرق المسكة قبل وبعد ────────────────────────────────────────
+  const before = invoiceFootprint(oldLines, returned, inv.status);
+  const after = invoiceFootprint(effectiveLines, returned, newStatus);
+
+  const productIds = new Set<number>([...before.keys(), ...after.keys()]);
+  const stockDeltas: Array<{ productId: number; delta: number }> = [];
+  for (const productId of productIds) {
+    // موجب ⇒ يخرج من الرصيد، سالب ⇒ يعود إليه.
+    const delta = (after.get(productId) ?? 0) - (before.get(productId) ?? 0);
+    if (delta !== 0) stockDeltas.push({ productId, delta });
+  }
+
+  // ── كتابة ───────────────────────────────────────────────────────────────
+  const updates: Record<string, any> = {
+    subtotal: String(newSubtotal),
+    discount: String(newDiscount),
+    tax: String(newTax),
+    total: String(newTotal),
+  };
+  if (notes !== undefined) updates.notes = notes;
+  if (paymentMethod !== undefined) updates.paymentMethod = finalPaymentMethod;
+  if (customerId !== undefined) updates.customerId = customerId ? Number(customerId) : null;
+  if (accountId !== undefined) updates.accountId = finalAccountId;
+  if (status !== undefined) updates.status = newStatus;
+
+  if (newLines) {
+    await db.delete(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, id));
+    await db.insert(invoiceItemsTable).values(
+      newLines.map((l) => ({
+        invoiceId: id,
+        productId: l.productId,
+        productName: l.productName,
+        barcode: l.barcode,
+        quantity: String(l.quantity),
+        unitPrice: String(l.unitPrice),
+        costPrice: l.costPrice,
+        discount: String(l.discount),
+        total: String(l.total),
+      })),
+    );
+  }
+
+  for (const { productId, delta } of stockDeltas) {
+    await db
+      .update(productsTable)
+      .set({ stock: sql`${productsTable.stock} - ${delta}` })
+      .where(eq(productsTable.id, productId));
+  }
+
+  const [updated] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, id)).returning();
+
+  await reconcileInvoiceLedger({
+    id: updated.id,
+    invoiceNumber: updated.invoiceNumber,
+    accountId: updated.accountId,
+    paymentMethod: updated.paymentMethod,
+    status: updated.status,
+    createdAt: updated.createdAt,
+    total: Number(updated.total),
+  });
 
   let customerName = null;
   if (updated.customerId) {
