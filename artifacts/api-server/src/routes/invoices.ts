@@ -462,6 +462,39 @@ router.patch("/invoices/:id", async (req, res) => {
     }
   }
 
+  /**
+   * إجمالي كمية الصنف في الفاتورة لا ينزل عمّا أُرجع منه.
+   *
+   * المرتجع يقول: خرجت هذه الكمية ثم عادت. فإن حُذف سطرها أو غُيّر صنفه،
+   * صارت الفاتورة تدّعي أنها لم تُخرجها قط بينما الرد قد سُجّل ورُدّ إلى
+   * الرصيد فعلًا. وحساب المسكة يقصّ السالب عند الصفر، فيبتلع التناقض بصمت
+   * ويعيد إلى المخزون ما لا يزال في يد العميل.
+   *
+   * الفحص يدور على ما أُرجع لا على ما أُرسل: السطر المحذوف لا يزوره أحد.
+   */
+  if (newLines) {
+    const submittedByProduct = new Map<number, number>();
+    for (const line of newLines) {
+      if (line.productId == null) continue;
+      submittedByProduct.set(line.productId, (submittedByProduct.get(line.productId) ?? 0) + line.quantity);
+    }
+
+    for (const [productId, returnedQty] of returned) {
+      const submitted = submittedByProduct.get(productId) ?? 0;
+      if (submitted < returnedQty) {
+        const name =
+          oldRows.find((r) => r.productId === productId)?.productName ?? `#${productId}`;
+        return res.status(409).json({
+          error: `لا يمكن إنزال كمية "${name}" إلى ${submitted} — أُرجع منها ${returnedQty} من قبل. ألغِ المرتجع أولًا، أو أبقِ الكمية ${returnedQty} فأكثر.`,
+          code: "LINES_BELOW_RETURNS",
+          productName: name,
+          returned: returnedQty,
+          submitted,
+        });
+      }
+    }
+  }
+
   const effectiveLines = newLines ?? oldLines;
   const newStatus = status !== undefined ? String(status) : inv.status;
   const finalPaymentMethod = paymentMethod !== undefined ? String(paymentMethod) : inv.paymentMethod;
@@ -473,16 +506,35 @@ router.patch("/invoices/:id", async (req, res) => {
   const newDiscount = discount !== undefined ? Number(discount) : Number(inv.discount);
 
   /**
-   * الضريبة مبلغ لا نسبة في هذا المخطط. فإن تغيّرت البنود ولم يرسل المُعدِّل
-   * مبلغًا، حملنا النسبة السابقة على المجموع الجديد — تركُ المبلغ كما هو
-   * يغيّر النسبة ضمنًا وبصمت، وهو أسوأ الاحتمالات في إقرار ضريبي.
+   * الخصم لا يتخطى قيمة ما فيه.
+   *
+   * كان الخصم يُقرأ كما هو ويُطرح من مجموعٍ صار المُعدِّل قادرًا على تصغيره:
+   * بنود بـ100 وخصمٌ قديم بـ200 يعطيان إجماليًا سالبًا، ويصير على العميل
+   * دَينٌ بالسالب في أرصدة الآجل. التحقق قبل أي كتابة.
    */
-  const priorRate = Number(inv.subtotal) > 0 ? Number(inv.tax) / Number(inv.subtotal) : 0;
+  if (newDiscount > newSubtotal) {
+    return res.status(400).json({
+      error: `الخصم ${newDiscount.toFixed(2)} ج.م أكبر من قيمة البنود ${newSubtotal.toFixed(2)} ج.م. عدّل الخصم أو البنود.`,
+      code: "DISCOUNT_EXCEEDS_SUBTOTAL",
+    });
+  }
+
+  /**
+   * الضريبة مبلغ لا نسبة في هذا المخطط. فإن تغيّرت البنود ولم يرسل المُعدِّل
+   * مبلغًا، حملنا النسبة السابقة على الأساس الجديد — تركُ المبلغ كما هو
+   * يغيّر النسبة ضمنًا وبصمت، وهو أسوأ الاحتمالات في إقرار ضريبي.
+   *
+   * والأساس هو الصافي بعد الخصم لا المجموع الفرعي: هكذا تُحسب الضريبة في
+   * هذا النظام أصلًا (`priceQuotation` في راوت عروض الأسعار)، والنسبة
+   * المستخرجة من قسمةٍ على المجموع تكون أصغر من الحقيقية بقدر الخصم.
+   */
+  const priorNet = Number(inv.subtotal) - Number(inv.discount);
+  const priorRate = priorNet > 0 ? Number(inv.tax) / priorNet : 0;
   const newTax =
     tax !== undefined
       ? Number(tax)
       : newLines
-        ? Math.round(newSubtotal * priorRate * 100) / 100
+        ? Math.round((newSubtotal - newDiscount) * priorRate * 100) / 100
         : Number(inv.tax);
 
   const newTotal = newSubtotal - newDiscount + newTax;
@@ -636,19 +688,31 @@ router.post("/invoices/:id/return", async (req, res) => {
 
   const originalItems = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
 
-  /**
-   * المبيع من كل منتج في هذه الفاتورة — مجموعًا لا من أول سطر يطابقه.
-   *
-   * المنتج قد يتكرر على أكثر من سطر، وكان الفحص يقارن بكمية السطر الأول
-   * وحده فيرفض إرجاعًا مشروعًا أو يقبل أكثر مما بِيع.
-   */
-  const soldByProduct = new Map<number, number>();
-  for (const line of originalItems) {
-    if (line.productId == null) continue;
-    soldByProduct.set(line.productId, (soldByProduct.get(line.productId) ?? 0) + Number(line.quantity));
-  }
-
   const alreadyReturned = await returnedByProduct(inv.id);
+
+  /**
+   * ما يمكن رده هو ما تمسكه الفاتورة الآن — لا "ما بِيع ناقص ما رُد".
+   *
+   * الفرق يظهر على الملغاة: مبيعها عشرة ومرتجعها صفر، فالحساب القديم يقبل
+   * رد ثلاثة منها. المخزون لا يتحرك ساعتها (الملغاة تمسك صفرًا) فيبدو
+   * الأمر سليمًا — حتى تُحيا الفاتورة، فتقرأ سطورها عشرة ناقص مرتجعًا
+   * ثلاثة وتخصم سبعة، بينما العشرة كلها خرجت فعلًا. ثلاث قطع تُخلق من
+   * العدم في اللحظة التي وُجدت هذه الميزة من أجلها.
+   *
+   * على المدفوعة والمرتجعة جزئيًا هذا الرقم مطابق للحساب القديم تمامًا.
+   */
+  const heldNow = invoiceFootprint(
+    originalItems.map((line) => ({ productId: line.productId, quantity: Number(line.quantity) })),
+    alreadyReturned,
+    inv.status,
+  );
+
+  if (inv.status === "cancelled") {
+    return res.status(409).json({
+      error: "الفاتورة ملغاة — لا شيء منها في يد العميل ليُرد. أعِد تفعيلها أولًا إن كان البيع قائمًا.",
+      code: "INVOICE_CANCELLED",
+    });
+  }
   /** ما يُطلب إرجاعه في هذا الطلب نفسه — منتج مكرر في الطلب لا يتخطى السقف مرتين. */
   const takenNow = new Map<number, number>();
 
@@ -668,8 +732,7 @@ router.post("/invoices/:id/return", async (req, res) => {
     const qty = Number(retItem.quantity);
     if (qty <= 0) continue;
 
-    const sold = soldByProduct.get(original.productId) ?? 0;
-    const remaining = sold - (alreadyReturned.get(original.productId) ?? 0) - (takenNow.get(original.productId) ?? 0);
+    const remaining = (heldNow.get(original.productId) ?? 0) - (takenNow.get(original.productId) ?? 0);
 
     if (qty > remaining) {
       return res.status(400).json({

@@ -183,9 +183,14 @@ function EditInvoiceDialog({ invoiceId, onClose }: { invoiceId: number; onClose:
   const subtotal = form.items.reduce((sum, l) => sum + lineTotal(l), 0);
   const newTotal = subtotal - num(form.discount) + num(form.tax);
 
-  /** النسبة التي كانت عليها الفاتورة، محمولةً على المجموع الجديد. */
-  const priorRate = Number(invoice.subtotal) > 0 ? Number(invoice.tax) / Number(invoice.subtotal) : 0;
-  const suggestedTax = Math.round(subtotal * priorRate * 100) / 100;
+  /**
+   * النسبة التي كانت عليها الفاتورة، محمولةً على الأساس الجديد.
+   * الأساس هو الصافي بعد الخصم — كما يحسبها الخادم تمامًا، فلا يختلف
+   * الرقم المعروض هنا عمّا يُحفظ هناك.
+   */
+  const priorNet = Number(invoice.subtotal) - Number(invoice.discount ?? 0);
+  const priorRate = priorNet > 0 ? Number(invoice.tax) / priorNet : 0;
+  const suggestedTax = Math.round((subtotal - num(form.discount)) * priorRate * 100) / 100;
   const taxDrifted = priorRate > 0 && Math.abs(suggestedTax - num(form.tax)) > 0.01;
 
   const handleSubmit = (e: React.FormEvent) => {

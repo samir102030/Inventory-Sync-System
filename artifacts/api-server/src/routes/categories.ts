@@ -32,7 +32,10 @@ router.delete("/categories/:id", async (req, res) => {
   const products = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.categoryId, catId));
   if (products.length > 0) {
     const productIds = products.map(p => p.id);
-    await db.delete(invoiceReturnItemsTable);
+    // بلا `where` كان هذا السطر يمحو بنود مرتجعات الشركة كلها لا مرتجعات
+    // منتجات هذا القسم — والسطر التالي مقيّد كما ينبغي، فالسهو ظاهر بمقارنتهما.
+    // ومع حساب المخزون من المرتجعات، محوُها يفسد أرصدةً حيّة لا تاريخًا فقط.
+    await db.delete(invoiceReturnItemsTable).where(inArray(invoiceReturnItemsTable.productId, productIds));
     await db.delete(invoiceItemsTable).where(inArray(invoiceItemsTable.productId, productIds));
     await db.delete(purchaseItemsTable).where(inArray(purchaseItemsTable.productId, productIds));
     await db.delete(warehouseStockTable).where(inArray(warehouseStockTable.productId, productIds));
