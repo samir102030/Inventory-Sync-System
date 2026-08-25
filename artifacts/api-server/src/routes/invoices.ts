@@ -380,6 +380,29 @@ router.get("/invoices/:id/returns", async (req, res) => {
   return res.json(result);
 });
 
+/**
+ * ما أُرجع فعلًا من كل منتج في هذه الفاتورة، عبر كل مرتجعاتها.
+ *
+ * الكمية المتبقية للإرجاع ليست كمية البند، بل كميته ناقص ما رجع منه من قبل.
+ * وبدون هذا الفرق كان المسار يقبل إرجاع البند كاملًا مرة بعد مرة — كل مرة
+ * تضيف كميته إلى المخزون — فبضاعة تُباع مرة تُرَد ثلاثًا وتُخلق من العدم.
+ */
+async function returnedByProduct(invoiceId: number): Promise<Map<number, number>> {
+  const rows = await db
+    .select({
+      productId: invoiceReturnItemsTable.productId,
+      qty: sql<number>`COALESCE(SUM(${invoiceReturnItemsTable.quantity}::numeric), 0)`,
+    })
+    .from(invoiceReturnItemsTable)
+    .innerJoin(invoiceReturnsTable, eq(invoiceReturnsTable.id, invoiceReturnItemsTable.returnId))
+    .where(eq(invoiceReturnsTable.invoiceId, invoiceId))
+    .groupBy(invoiceReturnItemsTable.productId);
+
+  const map = new Map<number, number>();
+  for (const r of rows) if (r.productId != null) map.set(r.productId, Number(r.qty));
+  return map;
+}
+
 router.post("/invoices/:id/return", async (req, res) => {
   const { reason, items, accountId: overrideAccountId } = req.body;
   if (!items?.length) return res.status(400).json({ error: "items required" });
@@ -389,6 +412,22 @@ router.post("/invoices/:id/return", async (req, res) => {
   const inv = invRows[0];
 
   const originalItems = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, inv.id));
+
+  /**
+   * المبيع من كل منتج في هذه الفاتورة — مجموعًا لا من أول سطر يطابقه.
+   *
+   * المنتج قد يتكرر على أكثر من سطر، وكان الفحص يقارن بكمية السطر الأول
+   * وحده فيرفض إرجاعًا مشروعًا أو يقبل أكثر مما بِيع.
+   */
+  const soldByProduct = new Map<number, number>();
+  for (const line of originalItems) {
+    if (line.productId == null) continue;
+    soldByProduct.set(line.productId, (soldByProduct.get(line.productId) ?? 0) + Number(line.quantity));
+  }
+
+  const alreadyReturned = await returnedByProduct(inv.id);
+  /** ما يُطلب إرجاعه في هذا الطلب نفسه — منتج مكرر في الطلب لا يتخطى السقف مرتين. */
+  const takenNow = new Map<number, number>();
 
   let returnTotal = 0;
   const returnItems: Array<{ productId: number; productName: string; quantity: number; unitPrice: number; total: number }> = [];
@@ -405,7 +444,24 @@ router.post("/invoices/:id/return", async (req, res) => {
     }
     const qty = Number(retItem.quantity);
     if (qty <= 0) continue;
-    if (qty > Number(original.quantity)) return res.status(400).json({ error: `Cannot return more than original quantity for ${original.productName}` });
+
+    const sold = soldByProduct.get(original.productId) ?? 0;
+    const remaining = sold - (alreadyReturned.get(original.productId) ?? 0) - (takenNow.get(original.productId) ?? 0);
+
+    if (qty > remaining) {
+      return res.status(400).json({
+        error:
+          remaining <= 0
+            ? `"${original.productName}" أُرجع بالكامل من قبل، فلا يبقى منه شيء للإرجاع.`
+            : `لا يمكن إرجاع ${qty} من "${original.productName}" — المتبقي للإرجاع ${remaining} فقط.`,
+        code: "RETURN_EXCEEDS_REMAINING",
+        productName: original.productName,
+        remaining: Math.max(0, remaining),
+      });
+    }
+
+    takenNow.set(original.productId, (takenNow.get(original.productId) ?? 0) + qty);
+
     const price = Number(original.unitPrice);
     const itemTotal = qty * price;
     returnTotal += itemTotal;
@@ -470,13 +526,57 @@ router.post("/invoices/:id/return", async (req, res) => {
   });
 });
 
+/**
+ * حذف فاتورة يعيد إلى المخزون ما لا تزال تمسكه.
+ *
+ * كان الحذف يمحو الفاتورة وسطورها ولا يمس المخزون إطلاقًا، بينما الإلغاء
+ * يرده. فبضاعة فاتورة محذوفة تختفي من الرصيد بلا أثر يفسرها — والفرق بين
+ * زرين متجاورين كان الفرق بين رصيد صحيح ورصيد ناقص إلى الأبد.
+ *
+ * "ما تمسكه" لا "ما بِيع فيها": الملغاة ردت مخزونها فلا تمسك شيئًا، وما
+ * أُرجع منها رُد بالفعل فلا يُرد مرتين. والسطر بلا منتج لا مخزون له.
+ *
+ * ومرتجعاتها تُحذف قبلها: `invoice_returns.invoice_id` بلا `cascade`، فكان
+ * حذف فاتورة عليها مرتجع يسقط على مخالفة مفتاح أجنبي بعد أن يكون قد محا
+ * حركات خزنتها.
+ */
 router.delete("/invoices/:id", async (req, res) => {
-  const returns = await db.select().from(invoiceReturnsTable).where(eq(invoiceReturnsTable.invoiceId, Number(req.params.id)));
+  const id = Number(req.params.id);
+
+  const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
+  if (!inv) return res.status(404).json({ error: "الفاتورة غير موجودة." });
+
+  if (inv.status !== "cancelled") {
+    const lines = await db.select().from(invoiceItemsTable).where(eq(invoiceItemsTable.invoiceId, id));
+    const returned = await returnedByProduct(id);
+
+    const held = new Map<number, number>();
+    for (const line of lines) {
+      if (line.productId == null) continue;
+      held.set(line.productId, (held.get(line.productId) ?? 0) + Number(line.quantity));
+    }
+    for (const [productId, qty] of returned) {
+      held.set(productId, (held.get(productId) ?? 0) - qty);
+    }
+
+    for (const [productId, qty] of held) {
+      if (qty <= 0) continue;
+      await db
+        .update(productsTable)
+        .set({ stock: sql`${productsTable.stock} + ${qty}` })
+        .where(eq(productsTable.id, productId));
+    }
+  }
+
+  const returns = await db.select().from(invoiceReturnsTable).where(eq(invoiceReturnsTable.invoiceId, id));
   for (const ret of returns) {
     await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice-return:${ret.id}`));
   }
-  await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${req.params.id}`));
-  await db.delete(invoicesTable).where(eq(invoicesTable.id, Number(req.params.id)));
+  // بنود المرتجع تسقط مع مرتجعها بـ cascade؛ المرتجع نفسه لا يسقط مع الفاتورة.
+  await db.delete(invoiceReturnsTable).where(eq(invoiceReturnsTable.invoiceId, id));
+
+  await db.delete(accountTransactionsTable).where(eq(accountTransactionsTable.reference, `invoice:${id}`));
+  await db.delete(invoicesTable).where(eq(invoicesTable.id, id));
   return res.json({ ok: true });
 });
 
