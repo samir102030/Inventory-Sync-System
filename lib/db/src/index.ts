@@ -11,7 +11,14 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// على Vercel كل instance له مخزنه، وعدد الـ instances يتغير مع الحمل؛ فنخفّض
+// الحجم هناك عبر DB_POOL_MAX كي لا نستنزف اتصالات Neon. الافتراضي كما كان.
+const poolMax = Number(process.env.DB_POOL_MAX) || 10;
+
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: poolMax,
+});
 
 /**
  * مخزن اتصالات منفصل للجلسات.
@@ -23,7 +30,7 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
  */
 export const sessionPool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 5,
+  max: Math.min(5, poolMax),
 });
 
 const rootDb = drizzle(pool, { schema });
